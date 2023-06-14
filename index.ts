@@ -1,11 +1,9 @@
+import ecc from './noble_ecc';
+
 const sec = require('bcrypto').secp256k1;
-// Const { Address, Coin, HDPrivateKey, HDPublicKey, KeyRing, MTX, Mnemonic, Network, Output, Script } = require("bcoin");
 const crypto = require('node:crypto');
 const ECPairFactory = require('ecpair').ECPairFactory;
-// Console.log(ECPairFactory);
-const ecc = require('tiny-secp256k1');
-const {fromBech32} = require('bitcoinjs-lib/src/address');
-const {bech32, bech32m} = require('bech32');
+const {bech32m} = require('bech32');
 
 const ECPair = ECPairFactory(ecc);
 

@@ -1,19 +1,6 @@
 /* global it */
-
-import ecc from '../noble_ecc';
-import {
-	deobfuscatedValueToOutputData,
-	deobfuscateValue,
-	keyToEventType,
-	keyToObfuscationKey,
-	keyToOutPoint,
-	varint128Read,
-} from '../util';
+import assert from 'node:assert';
 import {SilentPayment} from '../index';
-const bitcoin = require('bitcoinjs-lib');
-
-bitcoin.initEccLib(ecc);
-const assert = require('node:assert');
 
 it('smoke test', () => {
 	const sp = new SilentPayment();

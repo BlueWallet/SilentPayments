@@ -1,5 +1,7 @@
 {
 	"ignores": [
-		"noble_ecc.ts"
+		"noble_ecc.ts",
+		"babel.config.js",
+		"jest.config.ts"
 	]
 }

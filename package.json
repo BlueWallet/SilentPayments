@@ -1,6 +1,6 @@
 {
   "name": "silent-payments",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "",
   "main": "index.ts",
   "scripts": {
@@ -17,10 +17,6 @@
     "bip32": "^4.0.0",
     "bitcoinjs-lib": "^6.1.1",
     "ecpair": "2.0.1",
-    "level": "^8.0.0",
-    "leveldown": "^6.1.1",
-    "levelup": "^5.1.1",
-    "tiny-secp256k1": "^2.2.2",
     "ts-node": "^10.9.1"
   },
   "devDependencies": {
