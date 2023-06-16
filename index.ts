@@ -4,11 +4,8 @@ const sec = require("bcrypto").secp256k1;
 const crypto = require("node:crypto");
 const ECPairFactory = require("ecpair").ECPairFactory;
 const { bech32m } = require("bech32");
-
 const ECPair = ECPairFactory(ecc);
-
 const bitcoin = require("bitcoinjs-lib");
-
 bitcoin.initEccLib(ecc);
 
 type UTXO = {
@@ -23,10 +20,7 @@ type Target = {
   value?: number;
 };
 
-const G = Buffer.from(
-  "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
-  "hex"
-);
+const G = Buffer.from("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798", "hex");
 
 export class SilentPayment {
   /**
@@ -38,7 +32,14 @@ export class SilentPayment {
    * Numeric values (if present) for targets are passed through.
    */
   createTransaction(utxos: UTXO[], targets: Target[]): Target[] {
+    const ret: Target[] = [];
+
     for (const target of targets) {
+      if (!target.silentPaymentCode) {
+        ret.push(target); // passthrough
+        continue;
+      }
+
       const result = bech32m.decode(target.silentPaymentCode, 115);
       const version = result.words.shift();
       const data = bech32m.fromWords(result.words);
@@ -51,20 +52,19 @@ export class SilentPayment {
 
       //
 
-      const alice_privkey = ECPair.fromWIF(utxos[0].WIF);
+      /*const alice_privkey = ECPair.fromWIF(utxos[0].WIF);
 
       const a = alice_privkey.privateKey;
-      const A = alice_privkey.publicKey;
+      const A = alice_privkey.publicKey;*/
+
+      const a = SilentPayment._sumPrivkeys(utxos);
 
       //
 
-      const outpoint_hash = SilentPayment._outpointHash(utxos[0]);
+      const outpoint_hash = SilentPayment._outpointsHash(utxos);
       // Let ecdh_shared_secret = outpoints_hash·a·Bscan
       const ecdh_shared_secret_step1 = sec.privateKeyTweakMul(outpoint_hash, a);
-      const ecdh_shared_secret = sec.publicKeyTweakMul(
-        Buffer.concat([Buffer.from("02", "hex"), Bscan]),
-        ecdh_shared_secret_step1
-      );
+      const ecdh_shared_secret = sec.publicKeyTweakMul(Buffer.concat([Buffer.from("02", "hex"), Bscan]), ecdh_shared_secret_step1);
 
       // Let tn = sha256(ecdh_shared_secret) || ser32(n))
 
@@ -75,25 +75,27 @@ export class SilentPayment {
         .digest();
 
       // Let Pmn = tn·G + Bm
-      const Pnm = sec.publicKeyCombine([
-        sec.publicKeyTweakMul(G, tn),
-        Buffer.concat([Buffer.from("02", "hex"), Bm]),
-      ]);
+      const Pnm = sec.publicKeyCombine([sec.publicKeyTweakMul(G, tn), Buffer.concat([Buffer.from("02", "hex"), Bm])]);
 
       // Encode Pmn as a BIP341 taproot output
       const address = bitcoin.payments.p2tr({ pubkey: Pnm.slice(1) }).address;
 
-      return [{ address, value: target.value }];
+      const newTarget: Target = { address };
+      if (target.value) {
+        newTarget.value = target.value;
+      }
+
+      ret.push(newTarget);
     }
 
-    return [];
+    return ret;
   }
 
-  static _outpointHash(parameter: UTXO): Buffer {
-    const bufferConcat = Buffer.concat([
-      Buffer.from(parameter.txid, "hex").reverse(),
-      SilentPayment._ser32(parameter.vout),
-    ]);
+  static _outpointsHash(parameters: UTXO[]): Buffer {
+    let bufferConcat = Buffer.alloc(0);
+    for (const parameter of parameters) {
+      bufferConcat = Buffer.concat([bufferConcat, Buffer.from(parameter.txid, "hex").reverse(), SilentPayment._ser32(parameter.vout).reverse()]);
+    }
 
     return crypto.createHash("sha256").update(bufferConcat).digest();
   }
@@ -104,6 +106,16 @@ export class SilentPayment {
   static _ser32(i: number): Buffer {
     const returnValue = Buffer.allocUnsafe(4);
     returnValue.writeUInt32LE(i);
-    return returnValue;
+    return returnValue.reverse();
+  }
+
+  private static _sumPrivkeys(utxos: UTXO[]): Buffer {
+    let ret = ECPair.fromWIF(utxos[0].WIF).privateKey;
+
+    for (let c = 1; c < utxos.length; c++) {
+      ret = sec.privateKeyTweakAdd(ret, ECPair.fromWIF(utxos[c].WIF).privateKey);
+    }
+
+    return ret;
   }
 }
