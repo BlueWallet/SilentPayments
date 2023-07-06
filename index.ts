@@ -40,11 +40,11 @@ export class SilentPayment {
         continue;
       }
 
-      const result = bech32m.decode(target.silentPaymentCode, 115);
+      const result = bech32m.decode(target.silentPaymentCode, 117);
       const version = result.words.shift();
       const data = bech32m.fromWords(result.words);
-      const Bscan = Buffer.from(data.slice(0, 32));
-      const Bm = Buffer.from(data.slice(32));
+      const Bscan = Buffer.from(data.slice(0, 33));
+      const Bm = Buffer.from(data.slice(33));
 
       if (version !== 0) {
         throw new Error("Unexpected version of silent payment code");
@@ -64,7 +64,7 @@ export class SilentPayment {
       const outpoint_hash = SilentPayment._outpointsHash(utxos);
       // Let ecdh_shared_secret = outpoints_hash·a·Bscan
       const ecdh_shared_secret_step1 = sec.privateKeyTweakMul(outpoint_hash, a);
-      const ecdh_shared_secret = sec.publicKeyTweakMul(Buffer.concat([Buffer.from("02", "hex"), Bscan]), ecdh_shared_secret_step1);
+      const ecdh_shared_secret = sec.publicKeyTweakMul(Bscan, ecdh_shared_secret_step1);
 
       // Let tn = sha256(ecdh_shared_secret) || ser32(n))
 
@@ -75,7 +75,7 @@ export class SilentPayment {
         .digest();
 
       // Let Pmn = tn·G + Bm
-      const Pnm = sec.publicKeyCombine([sec.publicKeyTweakMul(G, tn), Buffer.concat([Buffer.from("02", "hex"), Bm])]);
+      const Pnm = sec.publicKeyCombine([sec.publicKeyTweakMul(G, tn), Bm]);
 
       // Encode Pmn as a BIP341 taproot output
       const address = bitcoin.payments.p2tr({ pubkey: Pnm.slice(1) }).address;
