@@ -96,10 +96,14 @@ export class SilentPayment {
 
   static _outpointsHash(parameters: UTXO[]): Buffer {
     let bufferConcat = Buffer.alloc(0);
+    let outpoints = [];
     for (const parameter of parameters) {
-      bufferConcat = Buffer.concat([bufferConcat, Buffer.from(parameter.txid, "hex").reverse(), SilentPayment._ser32(parameter.vout).reverse()]);
+      outpoints.push(Buffer.concat([Buffer.from(parameter.txid, "hex").reverse(), SilentPayment._ser32(parameter.vout).reverse()]));
     }
-
+    outpoints.sort(Buffer.compare);
+    for (const outpoint of outpoints) {
+      bufferConcat = Buffer.concat([bufferConcat, outpoint]);
+    }
     return crypto.createHash("sha256").update(bufferConcat).digest();
   }
 
@@ -108,8 +112,8 @@ export class SilentPayment {
    */
   static _ser32(i: number): Buffer {
     const returnValue = Buffer.allocUnsafe(4);
-    returnValue.writeUInt32LE(i);
-    return returnValue.reverse();
+    returnValue.writeUInt32BE(i);
+    return returnValue;
   }
 
   private static _sumPrivkeys(utxos: UTXO[]): Buffer {
