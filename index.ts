@@ -12,6 +12,7 @@ type UTXO = {
   txid: string;
   vout: number;
   WIF: string;
+  is_taproot: bool;
 };
 
 type Target = {
@@ -112,8 +113,18 @@ export class SilentPayment {
   private static _sumPrivkeys(utxos: UTXO[]): Buffer {
     let ret = ECPair.fromWIF(utxos[0].WIF).privateKey;
 
+    // If taproot, check if the seckey results in an odd y-value and negate if so
+    if (utxos[0].is_taproot && sec.publicKeyCreate(ret)[0] === 0x03) {
+      ret = sec.privateKeyNegate(ret);
+    }
     for (let c = 1; c < utxos.length; c++) {
-      ret = sec.privateKeyTweakAdd(ret, ECPair.fromWIF(utxos[c].WIF).privateKey);
+      let negated_key = ECPair.fromWIF(utxos[c].WIF).privateKey;
+
+      // If taproot, check if the seckey results in an odd y-value and negate if so
+      if (utxos[c].is_taproot && sec.publicKeyCreate(negated_key)[0] === 0x03) {
+        negated_key = sec.privateKeyNegate(negated_key);
+      }
+      ret = sec.privateKeyTweakAdd(ret, negated_key);
     }
 
     return ret;
