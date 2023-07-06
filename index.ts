@@ -35,6 +35,7 @@ export class SilentPayment {
   createTransaction(utxos: UTXO[], targets: Target[]): Target[] {
     const ret: Target[] = [];
 
+    let silentPaymentGroups = [];
     for (const target of targets) {
       if (!target.silentPaymentCode) {
         ret.push(target); // passthrough
@@ -50,45 +51,46 @@ export class SilentPayment {
       if (version !== 0) {
         throw new Error("Unexpected version of silent payment code");
       }
-
-      //
-
-      /*const alice_privkey = ECPair.fromWIF(utxos[0].WIF);
-
-      const a = alice_privkey.privateKey;
-      const A = alice_privkey.publicKey;*/
-
-      const a = SilentPayment._sumPrivkeys(utxos);
-
-      //
-
-      const outpoint_hash = SilentPayment._outpointsHash(utxos);
-      // Let ecdh_shared_secret = outpoints_hash·a·Bscan
-      const ecdh_shared_secret_step1 = sec.privateKeyTweakMul(outpoint_hash, a);
-      const ecdh_shared_secret = sec.publicKeyTweakMul(Bscan, ecdh_shared_secret_step1);
-
-      // Let tn = sha256(ecdh_shared_secret) || ser32(n))
-
-      // for n=0 ...
-      const tn = crypto
-        .createHash("sha256")
-        .update(Buffer.concat([ecdh_shared_secret, SilentPayment._ser32(0)]))
-        .digest();
-
-      // Let Pmn = tn·G + Bm
-      const Pnm = sec.publicKeyCombine([sec.publicKeyTweakMul(G, tn), Bm]);
-
-      // Encode Pmn as a BIP341 taproot output
-      const address = bitcoin.payments.p2tr({ pubkey: Pnm.slice(1) }).address;
-
-      const newTarget: Target = { address };
-      if (target.value) {
-        newTarget.value = target.value;
+      // Addresses with the same Bscan key all belong to the same recipient
+      let recipient = silentPaymentGroups.find((group) => Buffer.compare(group.Bscan, Bscan) === 0);
+      if (recipient) {
+        recipient.BmValues.push([Bm, target.value]);
+      } else {
+        silentPaymentGroups.push({
+          Bscan: Bscan,
+          BmValues: [[Bm, target.value]],
+        });
       }
-
-      ret.push(newTarget);
     }
+    if (silentPaymentGroups.length === 0) return ret; // passthrough
 
+    const a = SilentPayment._sumPrivkeys(utxos);
+    const outpoint_hash = SilentPayment._outpointsHash(utxos);
+
+    // Generating Pmn for each Bm in the group
+    for (const group of silentPaymentGroups) {
+      // Bscan * a * outpoint_hash
+      const ecdh_shared_secret_step1 = sec.privateKeyTweakMul(outpoint_hash, a);
+      const ecdh_shared_secret = sec.publicKeyTweakMul(group.Bscan, ecdh_shared_secret_step1);
+      let n = 0;
+      for (const [Bm, amount] of group.BmValues) {
+        const tn = crypto
+          .createHash("sha256")
+          .update(Buffer.concat([ecdh_shared_secret, SilentPayment._ser32(n)]))
+          .digest();
+
+        // Let Pmn = tn·G + Bm
+        const Pmn = sec.publicKeyCombine([sec.publicKeyTweakMul(G, tn), Bm]);
+
+        // Encode Pmn as a BIP341 taproot output
+        const address = Pmn.slice(1).toString("hex");
+        const newTarget: Target = { address };
+        newTarget.value = amount;
+        ret.push(newTarget);
+        n += 1;
+      }
+      n += 1;
+    }
     return ret;
   }
 
