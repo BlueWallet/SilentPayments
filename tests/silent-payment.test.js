@@ -7,9 +7,42 @@ const bitcoin = require("bitcoinjs-lib");
 bitcoin.initEccLib(ecc);
 const ECPair = ECPairFactory(ecc);
 
+const jsonInput = require("./data/sending_test_vectors.json");
+
 it("smoke test", () => {
   const sp = new SilentPayment();
   assert.deepStrictEqual(sp.createTransaction([], []), []);
+});
+
+/* Sending tests from the BIP352 test vectors */
+jsonInput.forEach((testCase, index) => {
+  // Prepare the 'inputs' array
+  const inputs = testCase.given.outpoints.map((outpoint, idx) => ({
+    txid: outpoint[0],
+    vout: outpoint[1],
+    WIF: ECPair.fromPrivateKey(Buffer.from(testCase.given.input_priv_keys[idx][0], "hex")).toWIF(),
+    is_taproot: testCase.given.input_priv_keys[idx][1],
+  }));
+
+  // Prepare the 'recipients' array
+  const recipients = testCase.given.recipients.map((recipient) => ({
+    silentPaymentCode: recipient[0],
+    value: recipient[1],
+  }));
+
+  it(`Test Case: ${testCase.comment} works`, () => {
+    const sp = new SilentPayment();
+    assert.deepStrictEqual(
+      sp.createTransaction(inputs, recipients),
+      testCase.expected.outputs.map((output) => {
+        const key = Object.keys(output)[0];
+        return {
+          address: key,
+          value: output[key],
+        };
+      })
+    );
+  });
 });
 
 it("2 inputs - 0 SP outputs (just a passthrough)", () => {
