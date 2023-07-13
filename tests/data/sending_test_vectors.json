@@ -1,0 +1,756 @@
+[
+  {
+    "comment": "Simple send: two inputs",
+    "given": {
+      "outpoints": [
+        [
+          "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
+          0
+        ],
+        [
+          "a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d",
+          0
+        ]
+      ],
+      "input_priv_keys": [
+        [
+          "7bab8a488a13ed393e28650c3f117558ef62bb2e41e98bd1a38e8e37536305b7",
+          false
+        ],
+        [
+          "0f4d9bcdd344a335145c4b0145f30ae3f382583049a1e5c43ace74059cece6a8",
+          false
+        ]
+      ],
+      "recipients": [
+        [
+          "sp1qqfp6u87em2ydhynpj4q72ujnhxnu0hed3h27e9df9al8hdznyk3j5qu7vz87f9u67cs200xhcs227rvq72wmv5edseet0hnjwtne4unnnvr2l3v8",
+          1
+        ]
+      ]
+    },
+    "expected": {
+      "outputs": [
+        {
+          "feb563950e21c2f1a7bab35c774beab453653bdd6b5a665adb22ce1a30fb083e": 1
+        }
+      ]
+    }
+  },
+  {
+    "comment": "Simple send: two inputs, order reversed",
+    "given": {
+      "outpoints": [
+        [
+          "a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d",
+          0
+        ],
+        [
+          "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
+          0
+        ]
+      ],
+      "input_priv_keys": [
+        [
+          "7bab8a488a13ed393e28650c3f117558ef62bb2e41e98bd1a38e8e37536305b7",
+          false
+        ],
+        [
+          "0f4d9bcdd344a335145c4b0145f30ae3f382583049a1e5c43ace74059cece6a8",
+          false
+        ]
+      ],
+      "recipients": [
+        [
+          "sp1qqfp6u87em2ydhynpj4q72ujnhxnu0hed3h27e9df9al8hdznyk3j5qu7vz87f9u67cs200xhcs227rvq72wmv5edseet0hnjwtne4unnnvr2l3v8",
+          1
+        ]
+      ]
+    },
+    "expected": {
+      "outputs": [
+        {
+          "feb563950e21c2f1a7bab35c774beab453653bdd6b5a665adb22ce1a30fb083e": 1
+        }
+      ]
+    }
+  },
+  {
+    "comment": "Simple send: two inputs from the same transaction",
+    "given": {
+      "outpoints": [
+        [
+          "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
+          3
+        ],
+        [
+          "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
+          7
+        ]
+      ],
+      "input_priv_keys": [
+        [
+          "7bab8a488a13ed393e28650c3f117558ef62bb2e41e98bd1a38e8e37536305b7",
+          false
+        ],
+        [
+          "0f4d9bcdd344a335145c4b0145f30ae3f382583049a1e5c43ace74059cece6a8",
+          false
+        ]
+      ],
+      "recipients": [
+        [
+          "sp1qqfp6u87em2ydhynpj4q72ujnhxnu0hed3h27e9df9al8hdznyk3j5qu7vz87f9u67cs200xhcs227rvq72wmv5edseet0hnjwtne4unnnvr2l3v8",
+          1
+        ]
+      ]
+    },
+    "expected": {
+      "outputs": [
+        {
+          "b7d731d1c0e9d586b3310bdece728f09b487226de5e3ab0660a7368852f3ff02": 1
+        }
+      ]
+    }
+  },
+  {
+    "comment": "Simple send: two inputs from the same transaction, order reversed",
+    "given": {
+      "outpoints": [
+        [
+          "a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d",
+          7
+        ],
+        [
+          "a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d",
+          3
+        ]
+      ],
+      "input_priv_keys": [
+        [
+          "7bab8a488a13ed393e28650c3f117558ef62bb2e41e98bd1a38e8e37536305b7",
+          false
+        ],
+        [
+          "0f4d9bcdd344a335145c4b0145f30ae3f382583049a1e5c43ace74059cece6a8",
+          false
+        ]
+      ],
+      "recipients": [
+        [
+          "sp1qqfp6u87em2ydhynpj4q72ujnhxnu0hed3h27e9df9al8hdznyk3j5qu7vz87f9u67cs200xhcs227rvq72wmv5edseet0hnjwtne4unnnvr2l3v8",
+          1
+        ]
+      ]
+    },
+    "expected": {
+      "outputs": [
+        {
+          "1b8b6f04c8d9e866fb89d9e04722d4d43675be977f2b251656472caeec423c9e": 1
+        }
+      ]
+    }
+  },
+  {
+    "comment": "Single recipient: multiple UTXOs from the same public key",
+    "given": {
+      "outpoints": [
+        [
+          "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
+          0
+        ],
+        [
+          "a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d",
+          0
+        ]
+      ],
+      "input_priv_keys": [
+        [
+          "7bab8a488a13ed393e28650c3f117558ef62bb2e41e98bd1a38e8e37536305b7",
+          false
+        ],
+        [
+          "7bab8a488a13ed393e28650c3f117558ef62bb2e41e98bd1a38e8e37536305b7",
+          false
+        ]
+      ],
+      "recipients": [
+        [
+          "sp1qqfp6u87em2ydhynpj4q72ujnhxnu0hed3h27e9df9al8hdznyk3j5qu7vz87f9u67cs200xhcs227rvq72wmv5edseet0hnjwtne4unnnvr2l3v8",
+          1
+        ]
+      ]
+    },
+    "expected": {
+      "outputs": [
+        {
+          "ebffe68f65898730750aab1770d71d5a0d83c9fc3753f3d277ab6095250046af": 1
+        }
+      ]
+    }
+  },
+  {
+    "comment": "Single recipient: taproot only inputs with even y-values",
+    "given": {
+      "outpoints": [
+        [
+          "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
+          0
+        ],
+        [
+          "a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d",
+          0
+        ]
+      ],
+      "input_priv_keys": [
+        [
+          "7bab8a488a13ed393e28650c3f117558ef62bb2e41e98bd1a38e8e37536305b7",
+          true
+        ],
+        [
+          "f0b264322cbb5ccaeba3b4feba0cf51ac72c84b665a6ba778503ea8733495a99",
+          true
+        ]
+      ],
+      "recipients": [
+        [
+          "sp1qqfp6u87em2ydhynpj4q72ujnhxnu0hed3h27e9df9al8hdznyk3j5qu7vz87f9u67cs200xhcs227rvq72wmv5edseet0hnjwtne4unnnvr2l3v8",
+          1
+        ]
+      ]
+    },
+    "expected": {
+      "outputs": [
+        {
+          "d628eb16f111d127a21927d8d1821457ec651d9990cf074746b34bf2b84e4b9b": 1
+        }
+      ]
+    }
+  },
+  {
+    "comment": "Single recipient: taproot only with mixed even/odd y-values",
+    "given": {
+      "outpoints": [
+        [
+          "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
+          0
+        ],
+        [
+          "a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d",
+          0
+        ]
+      ],
+      "input_priv_keys": [
+        [
+          "7bab8a488a13ed393e28650c3f117558ef62bb2e41e98bd1a38e8e37536305b7",
+          true
+        ],
+        [
+          "0f4d9bcdd344a335145c4b0145f30ae3f382583049a1e5c43ace74059cece6a8",
+          true
+        ]
+      ],
+      "recipients": [
+        [
+          "sp1qqfp6u87em2ydhynpj4q72ujnhxnu0hed3h27e9df9al8hdznyk3j5qu7vz87f9u67cs200xhcs227rvq72wmv5edseet0hnjwtne4unnnvr2l3v8",
+          1
+        ]
+      ]
+    },
+    "expected": {
+      "outputs": [
+        {
+          "d628eb16f111d127a21927d8d1821457ec651d9990cf074746b34bf2b84e4b9b": 1
+        }
+      ]
+    }
+  },
+  {
+    "comment": "Single recipient: taproot input with even y-value and non-taproot input",
+    "given": {
+      "outpoints": [
+        [
+          "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
+          0
+        ],
+        [
+          "a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d",
+          0
+        ]
+      ],
+      "input_priv_keys": [
+        [
+          "7bab8a488a13ed393e28650c3f117558ef62bb2e41e98bd1a38e8e37536305b7",
+          true
+        ],
+        [
+          "8b902a9a6fd629b4b79e59e1c811fb7ebb4e7e39bd2618f58db3cc0e2b92644c",
+          false
+        ]
+      ],
+      "recipients": [
+        [
+          "sp1qqfp6u87em2ydhynpj4q72ujnhxnu0hed3h27e9df9al8hdznyk3j5qu7vz87f9u67cs200xhcs227rvq72wmv5edseet0hnjwtne4unnnvr2l3v8",
+          1
+        ]
+      ]
+    },
+    "expected": {
+      "outputs": [
+        {
+          "66b7d24355f2ca5437d51f459601ab89a2ec66e3cf4aad039df0b1d9dbacc519": 1
+        }
+      ]
+    }
+  },
+  {
+    "comment": "Single recipient: taproot input with odd y-value and non-taproot input",
+    "given": {
+      "outpoints": [
+        [
+          "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
+          0
+        ],
+        [
+          "a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d",
+          0
+        ]
+      ],
+      "input_priv_keys": [
+        [
+          "0f4d9bcdd344a335145c4b0145f30ae3f382583049a1e5c43ace74059cece6a8",
+          true
+        ],
+        [
+          "8b902a9a6fd629b4b79e59e1c811fb7ebb4e7e39bd2618f58db3cc0e2b92644c",
+          false
+        ]
+      ],
+      "recipients": [
+        [
+          "sp1qqfp6u87em2ydhynpj4q72ujnhxnu0hed3h27e9df9al8hdznyk3j5qu7vz87f9u67cs200xhcs227rvq72wmv5edseet0hnjwtne4unnnvr2l3v8",
+          1
+        ]
+      ]
+    },
+    "expected": {
+      "outputs": [
+        {
+          "a0969f9f9ffc3c1e3e84bf30da980e405ec977c0e8a39ffab76bd73f780d907d": 1
+        }
+      ]
+    }
+  },
+  {
+    "comment": "Multiple outputs: multiple outputs, same recipient",
+    "given": {
+      "outpoints": [
+        [
+          "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
+          0
+        ],
+        [
+          "a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d",
+          0
+        ]
+      ],
+      "input_priv_keys": [
+        [
+          "7bab8a488a13ed393e28650c3f117558ef62bb2e41e98bd1a38e8e37536305b7",
+          false
+        ],
+        [
+          "0f4d9bcdd344a335145c4b0145f30ae3f382583049a1e5c43ace74059cece6a8",
+          false
+        ]
+      ],
+      "recipients": [
+        [
+          "sp1qqfp6u87em2ydhynpj4q72ujnhxnu0hed3h27e9df9al8hdznyk3j5qu7vz87f9u67cs200xhcs227rvq72wmv5edseet0hnjwtne4unnnvr2l3v8",
+          1
+        ],
+        [
+          "sp1qqfp6u87em2ydhynpj4q72ujnhxnu0hed3h27e9df9al8hdznyk3j5qu7vz87f9u67cs200xhcs227rvq72wmv5edseet0hnjwtne4unnnvr2l3v8",
+          2
+        ]
+      ]
+    },
+    "expected": {
+      "outputs": [
+        {
+          "feb563950e21c2f1a7bab35c774beab453653bdd6b5a665adb22ce1a30fb083e": 1
+        },
+        {
+          "68e1fc9289d4754230e4f7f8025252f93b58182c0d45b2ddfffdf694fad55b73": 2
+        }
+      ]
+    }
+  },
+  {
+    "comment": "Multiple outputs: multiple outputs, multiple recipients",
+    "given": {
+      "outpoints": [
+        [
+          "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
+          0
+        ],
+        [
+          "a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d",
+          0
+        ]
+      ],
+      "input_priv_keys": [
+        [
+          "7bab8a488a13ed393e28650c3f117558ef62bb2e41e98bd1a38e8e37536305b7",
+          false
+        ],
+        [
+          "0f4d9bcdd344a335145c4b0145f30ae3f382583049a1e5c43ace74059cece6a8",
+          false
+        ]
+      ],
+      "recipients": [
+        [
+          "sp1qqfp6u87em2ydhynpj4q72ujnhxnu0hed3h27e9df9al8hdznyk3j5qu7vz87f9u67cs200xhcs227rvq72wmv5edseet0hnjwtne4unnnvr2l3v8",
+          1
+        ],
+        [
+          "sp1qqfp6u87em2ydhynpj4q72ujnhxnu0hed3h27e9df9al8hdznyk3j5qu7vz87f9u67cs200xhcs227rvq72wmv5edseet0hnjwtne4unnnvr2l3v8",
+          2
+        ],
+        [
+          "sp1qqf07wf7sqlc4xp8kjlfrp4lsz4yew6y03465a6e7nw5qsj3pjl38yq6v4h4hkf2vderqh0mx8gnrv844k8fua7sdpnqfjfpzvfppqg7rlg0ln97k",
+          1
+        ],
+        [
+          "sp1qqf07wf7sqlc4xp8kjlfrp4lsz4yew6y03465a6e7nw5qsj3pjl38yq6v4h4hkf2vderqh0mx8gnrv844k8fua7sdpnqfjfpzvfppqg7rlg0ln97k",
+          2
+        ]
+      ]
+    },
+    "expected": {
+      "outputs": [
+        {
+          "feb563950e21c2f1a7bab35c774beab453653bdd6b5a665adb22ce1a30fb083e": 1
+        },
+        {
+          "68e1fc9289d4754230e4f7f8025252f93b58182c0d45b2ddfffdf694fad55b73": 2
+        },
+        {
+          "f1f7f78662031ea3b7f66ac72695dc87883d694ddf840cd3e78d59020e911e50": 1
+        },
+        {
+          "3dfa6c26bf28f4047363113336861c4d30c787603b6682ca8cf986bb3488fdac": 2
+        }
+      ]
+    }
+  },
+  {
+    "comment": "Receiving with labels: label with even parity",
+    "given": {
+      "outpoints": [
+        [
+          "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
+          0
+        ],
+        [
+          "a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d",
+          0
+        ]
+      ],
+      "input_priv_keys": [
+        [
+          "7bab8a488a13ed393e28650c3f117558ef62bb2e41e98bd1a38e8e37536305b7",
+          false
+        ],
+        [
+          "0f4d9bcdd344a335145c4b0145f30ae3f382583049a1e5c43ace74059cece6a8",
+          false
+        ]
+      ],
+      "recipients": [
+        [
+          "sp1qqfp6u87em2ydhynpj4q72ujnhxnu0hed3h27e9df9al8hdznyk3j5qe43t95zqg7kee0gjxvwaa9nd2zmn4h9hhy9at4xcaavqxxprs7wue4wugl",
+          1
+        ]
+      ]
+    },
+    "expected": {
+      "outputs": [
+        {
+          "14467ccf40b1436244cf78297dbf394d1d801b04cc804f89b79ff6fce9f90696": 1
+        }
+      ]
+    }
+  },
+  {
+    "comment": "Receiving with labels: label with odd parity",
+    "given": {
+      "outpoints": [
+        [
+          "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
+          0
+        ],
+        [
+          "a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d",
+          0
+        ]
+      ],
+      "input_priv_keys": [
+        [
+          "7bab8a488a13ed393e28650c3f117558ef62bb2e41e98bd1a38e8e37536305b7",
+          false
+        ],
+        [
+          "0f4d9bcdd344a335145c4b0145f30ae3f382583049a1e5c43ace74059cece6a8",
+          false
+        ]
+      ],
+      "recipients": [
+        [
+          "sp1qqfp6u87em2ydhynpj4q72ujnhxnu0hed3h27e9df9al8hdznyk3j5q4g0g3dc5me3p54gy37se6cuqnlaeu0vpa8j0ufzud8y6gmwmyzav4gsvud",
+          1
+        ]
+      ]
+    },
+    "expected": {
+      "outputs": [
+        {
+          "ee381b2caa9c5b0184f9061f0b577417fe547ce9f00580f4a9794aa4c2cffb03": 1
+        }
+      ]
+    }
+  },
+  {
+    "comment": "Receiving with labels: large label integer",
+    "given": {
+      "outpoints": [
+        [
+          "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
+          0
+        ],
+        [
+          "a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d",
+          0
+        ]
+      ],
+      "input_priv_keys": [
+        [
+          "7bab8a488a13ed393e28650c3f117558ef62bb2e41e98bd1a38e8e37536305b7",
+          false
+        ],
+        [
+          "0f4d9bcdd344a335145c4b0145f30ae3f382583049a1e5c43ace74059cece6a8",
+          false
+        ]
+      ],
+      "recipients": [
+        [
+          "sp1qqfp6u87em2ydhynpj4q72ujnhxnu0hed3h27e9df9al8hdznyk3j5qamqvqtpeq8jsmvvrh4k60v20q4v0p7t09985y8wgls3s550pfxpsazxr9n",
+          1
+        ]
+      ]
+    },
+    "expected": {
+      "outputs": [
+        {
+          "3eb48b7940b733b15e8333ec8f6e9445a7e247ef653f4876d605b31f1fbc1c27": 1
+        }
+      ]
+    }
+  },
+  {
+    "comment": "Multiple outputs with labels: un-labeled and labeled address; same recipient",
+    "given": {
+      "outpoints": [
+        [
+          "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
+          0
+        ],
+        [
+          "a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d",
+          0
+        ]
+      ],
+      "input_priv_keys": [
+        [
+          "7bab8a488a13ed393e28650c3f117558ef62bb2e41e98bd1a38e8e37536305b7",
+          false
+        ],
+        [
+          "0f4d9bcdd344a335145c4b0145f30ae3f382583049a1e5c43ace74059cece6a8",
+          false
+        ]
+      ],
+      "recipients": [
+        [
+          "sp1qqfp6u87em2ydhynpj4q72ujnhxnu0hed3h27e9df9al8hdznyk3j5qu7vz87f9u67cs200xhcs227rvq72wmv5edseet0hnjwtne4unnnvr2l3v8",
+          1
+        ],
+        [
+          "sp1qqfp6u87em2ydhynpj4q72ujnhxnu0hed3h27e9df9al8hdznyk3j5qedes7rsh8ccyyyvd2qwccwn9sah2jw4yxuatkddnueh4n5f5ppky8xuvzp",
+          2
+        ]
+      ]
+    },
+    "expected": {
+      "outputs": [
+        {
+          "feb563950e21c2f1a7bab35c774beab453653bdd6b5a665adb22ce1a30fb083e": 1
+        },
+        {
+          "9635ad37b7369acc8cd1be40e313c46228ebf233e2ac3d3b05f4cbf34a2031b7": 2
+        }
+      ]
+    }
+  },
+  {
+    "comment": "Multiple outputs with labels: multiple outputs for labeled address; same recipient",
+    "given": {
+      "outpoints": [
+        [
+          "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
+          0
+        ],
+        [
+          "a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d",
+          0
+        ]
+      ],
+      "input_priv_keys": [
+        [
+          "7bab8a488a13ed393e28650c3f117558ef62bb2e41e98bd1a38e8e37536305b7",
+          false
+        ],
+        [
+          "0f4d9bcdd344a335145c4b0145f30ae3f382583049a1e5c43ace74059cece6a8",
+          false
+        ]
+      ],
+      "recipients": [
+        [
+          "sp1qqfp6u87em2ydhynpj4q72ujnhxnu0hed3h27e9df9al8hdznyk3j5qedes7rsh8ccyyyvd2qwccwn9sah2jw4yxuatkddnueh4n5f5ppky8xuvzp",
+          1
+        ],
+        [
+          "sp1qqfp6u87em2ydhynpj4q72ujnhxnu0hed3h27e9df9al8hdznyk3j5qedes7rsh8ccyyyvd2qwccwn9sah2jw4yxuatkddnueh4n5f5ppky8xuvzp",
+          2
+        ]
+      ]
+    },
+    "expected": {
+      "outputs": [
+        {
+          "c39acba526c1ae264c64101e9fc51312d364628a9b6d2608b1209811e1e2dae9": 1
+        },
+        {
+          "9635ad37b7369acc8cd1be40e313c46228ebf233e2ac3d3b05f4cbf34a2031b7": 2
+        }
+      ]
+    }
+  },
+  {
+    "comment": "Multiple outputs with labels: un-labeled, labeled, and multiple outputs for labeled address; multiple recipients",
+    "given": {
+      "outpoints": [
+        [
+          "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
+          0
+        ],
+        [
+          "a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d",
+          0
+        ]
+      ],
+      "input_priv_keys": [
+        [
+          "7bab8a488a13ed393e28650c3f117558ef62bb2e41e98bd1a38e8e37536305b7",
+          false
+        ],
+        [
+          "0f4d9bcdd344a335145c4b0145f30ae3f382583049a1e5c43ace74059cece6a8",
+          false
+        ]
+      ],
+      "recipients": [
+        [
+          "sp1qqfp6u87em2ydhynpj4q72ujnhxnu0hed3h27e9df9al8hdznyk3j5qu7vz87f9u67cs200xhcs227rvq72wmv5edseet0hnjwtne4unnnvr2l3v8",
+          1
+        ],
+        [
+          "sp1qqfp6u87em2ydhynpj4q72ujnhxnu0hed3h27e9df9al8hdznyk3j5qedes7rsh8ccyyyvd2qwccwn9sah2jw4yxuatkddnueh4n5f5ppky8xuvzp",
+          2
+        ],
+        [
+          "sp1qqfp6u87em2ydhynpj4q72ujnhxnu0hed3h27e9df9al8hdznyk3j5qaxs279c4lezsljhk5tp298n3hg86j0knfevnalyq3mm036qe3qayy9jyyk",
+          3
+        ],
+        [
+          "sp1qqfp6u87em2ydhynpj4q72ujnhxnu0hed3h27e9df9al8hdznyk3j5qaxs279c4lezsljhk5tp298n3hg86j0knfevnalyq3mm036qe3qayy9jyyk",
+          4
+        ]
+      ]
+    },
+    "expected": {
+      "outputs": [
+        {
+          "feb563950e21c2f1a7bab35c774beab453653bdd6b5a665adb22ce1a30fb083e": 1
+        },
+        {
+          "9635ad37b7369acc8cd1be40e313c46228ebf233e2ac3d3b05f4cbf34a2031b7": 2
+        },
+        {
+          "ad36a792d1350f05e64776ce543f5334ce2aeb58b763142d78eee6127d5a2d32": 3
+        },
+        {
+          "2eb47ef191765bce751ac8eb4132b952666033c5ed0406cd5fed2249a0e45e7c": 4
+        }
+      ]
+    }
+  },
+  {
+    "comment": "Single recipient: use silent payments for sender change",
+    "given": {
+      "outpoints": [
+        [
+          "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
+          0
+        ],
+        [
+          "a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d",
+          0
+        ]
+      ],
+      "input_priv_keys": [
+        [
+          "7bab8a488a13ed393e28650c3f117558ef62bb2e41e98bd1a38e8e37536305b7",
+          false
+        ],
+        [
+          "0f4d9bcdd344a335145c4b0145f30ae3f382583049a1e5c43ace74059cece6a8",
+          false
+        ]
+      ],
+      "recipients": [
+        [
+          "sp1qqfp6u87em2ydhynpj4q72ujnhxnu0hed3h27e9df9al8hdznyk3j5qu7vz87f9u67cs200xhcs227rvq72wmv5edseet0hnjwtne4unnnvr2l3v8",
+          1
+        ],
+        [
+          "sp1qqfrlc6zc0xk9gx5pcy8x3apev9vjyc2x2awefkscs0y9658lasgl6q4lp4r3q99mrgewxln2l6wfkmyttz7x3cwltchkqa3gftdsjp9reuypwt9u",
+          2
+        ]
+      ]
+    },
+    "expected": {
+      "outputs": [
+        {
+          "feb563950e21c2f1a7bab35c774beab453653bdd6b5a665adb22ce1a30fb083e": 1
+        },
+        {
+          "6a9352c6f71b4c08d6252fdfb43f15584d3e2b71e03268336462287ba15a4478": 2
+        }
+      ]
+    }
+  }
+]
