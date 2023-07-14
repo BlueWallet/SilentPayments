@@ -12,13 +12,18 @@ type UTXO = {
   txid: string;
   vout: number;
   WIF: string;
-  is_taproot: bool;
+  is_taproot: boolean;
 };
 
 type Target = {
   silentPaymentCode?: string;
   address?: string;
   value?: number;
+};
+
+type SilentPaymentGroup = {
+  Bscan: Buffer;
+  BmValues: Array<[Buffer, number | undefined]>;
 };
 
 const G = Buffer.from("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798", "hex");
@@ -35,7 +40,7 @@ export class SilentPayment {
   createTransaction(utxos: UTXO[], targets: Target[]): Target[] {
     const ret: Target[] = [];
 
-    let silentPaymentGroups = [];
+    let silentPaymentGroups: Array<SilentPaymentGroup> = [];
     for (const target of targets) {
       if (!target.silentPaymentCode) {
         ret.push(target); // passthrough
@@ -96,7 +101,7 @@ export class SilentPayment {
 
   static _outpointsHash(parameters: UTXO[]): Buffer {
     let bufferConcat = Buffer.alloc(0);
-    let outpoints = [];
+    let outpoints: Array<Buffer> = [];
     for (const parameter of parameters) {
       outpoints.push(Buffer.concat([Buffer.from(parameter.txid, "hex").reverse(), SilentPayment._ser32(parameter.vout).reverse()]));
     }
