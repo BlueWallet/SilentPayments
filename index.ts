@@ -1,7 +1,5 @@
 import ecc from "./noble_ecc";
-
-const sec = require("bcrypto").secp256k1;
-const crypto = require("node:crypto");
+const crypto = require("crypto");
 const ECPairFactory = require("ecpair").ECPairFactory;
 const { bech32m } = require("bech32");
 const ECPair = ECPairFactory(ecc);
@@ -75,17 +73,18 @@ export class SilentPayment {
     // Generating Pmn for each Bm in the group
     for (const group of silentPaymentGroups) {
       // Bscan * a * outpoint_hash
-      const ecdh_shared_secret_step1 = sec.privateKeyTweakMul(outpoint_hash, a);
-      const ecdh_shared_secret = sec.publicKeyTweakMul(group.Bscan, ecdh_shared_secret_step1);
+      const ecdh_shared_secret_step1 = Buffer.from(ecc.privateMultiply(outpoint_hash, a) as Uint8Array);
+      const ecdh_shared_secret = ecc.pointMultiply(group.Bscan, ecdh_shared_secret_step1);
+
       let n = 0;
       for (const [Bm, amount] of group.BmValues) {
         const tn = crypto
           .createHash("sha256")
-          .update(Buffer.concat([ecdh_shared_secret, SilentPayment._ser32(n)]))
+          .update(Buffer.concat([ecdh_shared_secret!, SilentPayment._ser32(n)]))
           .digest();
 
         // Let Pmn = tn·G + Bm
-        const Pmn = sec.publicKeyCombine([sec.publicKeyTweakMul(G, tn), Bm]);
+        const Pmn = Buffer.from(ecc.pointAdd(ecc.pointMultiply(G, tn) as Uint8Array, Bm) as Uint8Array);
 
         // Encode Pmn as a BIP341 taproot output
         const address = Pmn.slice(1).toString("hex");
@@ -125,17 +124,17 @@ export class SilentPayment {
     let ret = ECPair.fromWIF(utxos[0].WIF).privateKey;
 
     // If taproot, check if the seckey results in an odd y-value and negate if so
-    if (utxos[0].is_taproot && sec.publicKeyCreate(ret)[0] === 0x03) {
-      ret = sec.privateKeyNegate(ret);
+    if (utxos[0].is_taproot && ecc.pointFromScalar(ret)![0] === 0x03) {
+      ret = Buffer.from(ecc.privateNegate(ret));
     }
     for (let c = 1; c < utxos.length; c++) {
       let negated_key = ECPair.fromWIF(utxos[c].WIF).privateKey;
 
       // If taproot, check if the seckey results in an odd y-value and negate if so
-      if (utxos[c].is_taproot && sec.publicKeyCreate(negated_key)[0] === 0x03) {
-        negated_key = sec.privateKeyNegate(negated_key);
+      if (utxos[c].is_taproot && ecc.pointFromScalar(negated_key)![0] === 0x03) {
+        negated_key = Buffer.from(ecc.privateNegate(negated_key));
       }
-      ret = sec.privateKeyTweakAdd(ret, negated_key);
+      ret = Buffer.from(ecc.privateAdd(ret, negated_key) as Uint8Array);
     }
 
     return ret;
