@@ -1,6 +1,6 @@
 {
   "name": "silent-payments",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "",
   "main": "index.ts",
   "scripts": {
@@ -10,23 +10,21 @@
   "author": "overtorment",
   "license": "MIT",
   "dependencies": {
+    "@noble/secp256k1": "1.6.3",
+    "bitcoinjs-lib": "^6.1.1",
+    "ecpair": "2.0.1"
+  },
+  "devDependencies": {
     "@babel/core": "^7.22.1",
     "@babel/preset-env": "^7.22.4",
     "@babel/preset-typescript": "^7.21.5",
-    "@noble/secp256k1": "1.6.3",
-    "bcrypto": "^5.4.0",
-    "bip32": "^4.0.0",
-    "bitcoinjs-lib": "^6.1.1",
-    "ecpair": "2.0.1",
-    "ts-node": "^10.9.1"
-  },
-  "devDependencies": {
     "@tsconfig/recommended": "^1.0.2",
     "@types/create-hash": "^1.2.2",
     "@types/node": "^20.2.5",
     "babel-jest": "^29.5.0",
     "jest": "^29.5.0",
     "prettier": "2.8.8",
+    "ts-node": "^10.9.1",
     "typescript": "^5.1.6"
   }
 }
