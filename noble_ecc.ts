@@ -12,21 +12,6 @@
 import createHash from "create-hash";
 import { createHmac } from "crypto";
 import * as necc from "@noble/secp256k1";
-import { TinySecp256k1Interface } from "ecpair/src/ecpair";
-import { TinySecp256k1Interface as TinySecp256k1InterfaceBIP32 } from "bip32/types/bip32";
-import { XOnlyPointAddTweakResult } from "bitcoinjs-lib/src/types";
-
-export interface TinySecp256k1InterfaceExtended {
-  pointMultiply(p: Uint8Array, tweak: Uint8Array, compressed?: boolean): Uint8Array | null;
-  privateMultiply(p: Uint8Array, tweak: Uint8Array): Uint8Array | null;
-  privateNegate(d: Uint8Array): Uint8Array;
-
-  pointAdd(pA: Uint8Array, pB: Uint8Array, compressed?: boolean): Uint8Array | null;
-
-  isXOnlyPoint(p: Uint8Array): boolean;
-
-  xOnlyPointAddTweak(p: Uint8Array, tweak: Uint8Array): XOnlyPointAddTweakResult | null;
-}
 
 necc.utils.sha256Sync = (...messages: Uint8Array[]): Uint8Array => {
   const sha256 = createHash("sha256");
@@ -59,7 +44,7 @@ function isPoint(p: Uint8Array, xOnly: boolean): boolean {
   }
 }
 
-const ecc: TinySecp256k1InterfaceExtended & TinySecp256k1Interface & TinySecp256k1InterfaceBIP32 = {
+const ecc = {
   isPoint: (p: Uint8Array): boolean => isPoint(p, false),
   isPrivate: (d: Uint8Array): boolean => {
     return necc.utils.isValidPrivateKey(d);

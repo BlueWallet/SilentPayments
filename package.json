@@ -11,7 +11,6 @@
   "license": "MIT",
   "dependencies": {
     "@noble/secp256k1": "1.6.3",
-    "bip32": "^4.0.0",
     "bitcoinjs-lib": "^6.1.1",
     "ecpair": "2.0.1"
   },
