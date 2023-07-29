@@ -2,6 +2,10 @@
  * adapted from https://github.com/BitGo/BitGoJS/blob/bitcoinjs_lib_6_sync/modules/utxo-lib/src/noble_ecc.ts
  * license: Apache License
  *
+ * some pieces are ported from:
+ * https://github.com/paulmillr/noble-secp256k1
+ * https://github.com/bitcoinerlab/secp256k1
+ *
  * @see https://github.com/bitcoinjs/tiny-secp256k1/issues/84#issuecomment-1185682315
  * @see https://github.com/bitcoinjs/bitcoinjs-lib/issues/1781
  */
@@ -42,7 +46,6 @@ function throwToNull<Type>(fn: () => Type): Type | null {
   try {
     return fn();
   } catch (e) {
-    // console.log(e);
     return null;
   }
 }
@@ -59,15 +62,6 @@ function isPoint(p: Uint8Array, xOnly: boolean): boolean {
 const ecc: TinySecp256k1InterfaceExtended & TinySecp256k1Interface & TinySecp256k1InterfaceBIP32 = {
   isPoint: (p: Uint8Array): boolean => isPoint(p, false),
   isPrivate: (d: Uint8Array): boolean => {
-    /* if (
-      [
-        '0000000000000000000000000000000000000000000000000000000000000000',
-        'fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141',
-        'fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364142',
-      ].includes(d.toString('hex'))
-    ) {
-      return false;
-    } */
     return necc.utils.isValidPrivateKey(d);
   },
   isXOnlyPoint: (p: Uint8Array): boolean => isPoint(p, true),
@@ -98,9 +92,7 @@ const ecc: TinySecp256k1InterfaceExtended & TinySecp256k1Interface & TinySecp256
 
   privateAdd: (d: Uint8Array, tweak: Uint8Array): Uint8Array | null =>
     throwToNull(() => {
-      // console.log({ d, tweak });
       const ret = necc.utils.privateAdd(d, tweak);
-      // console.log(ret);
       if (ret.join("") === "00000000000000000000000000000000") {
         return null;
       }
@@ -143,8 +135,6 @@ const ecc: TinySecp256k1InterfaceExtended & TinySecp256k1Interface & TinySecp256
 };
 
 export default ecc;
-
-// module.exports.ecc = ecc;
 
 function normalizeScalar(scalar: any) {
   let num;
@@ -194,7 +184,6 @@ function normalizePrivateKey(key: PrivKey): bigint {
   return num;
 }
 
-// We can't do `instanceof Uint8Array` because it's unreliable between Web Workers etc
 function isUint8a(bytes: Uint8Array | unknown): bytes is Uint8Array {
   return bytes instanceof Uint8Array;
 }
@@ -203,31 +192,22 @@ function isWithinCurveOrder(num: bigint): boolean {
   return _0n < num && num < CURVE.n;
 }
 
-// Be friendly to bad ECMAScript parsers by not using bigint literals like 123n
 const _0n = BigInt(0);
 const _1n = BigInt(1);
 const _2n = BigInt(2);
-const _3n = BigInt(3);
-const _8n = BigInt(8);
 
 // @ts-ignore
 const POW_2_256 = _2n ** BigInt(256);
 
 const CURVE = {
-  // Params: a, b
   a: _0n,
   b: BigInt(7),
-  // Field over which we'll do calculations
   // @ts-ignore
   P: POW_2_256 - _2n ** BigInt(32) - BigInt(977),
-  // Curve order, a number of valid points in the field
   n: POW_2_256 - BigInt("432420386565659656852420866394968145599"),
-  // Cofactor. It's 1, so other subgroups don't exist, and default subgroup is prime-order
   h: _1n,
-  // Base point (x, y) aka generator point
   Gx: BigInt("55066263022277343669578718895168534326250603453777594175500187360389116729240"),
   Gy: BigInt("32670510020758816978083085130507043184471273380659243275938904335757337482424"),
-  // For endomorphism, see below
   beta: BigInt("0x7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501ee"),
 };
 
@@ -243,7 +223,6 @@ function numTo32bStr(num: bigint): string {
   return num.toString(16).padStart(64, "0");
 }
 
-// Caching slows it down 2-3x
 function hexToBytes(hex: string): Uint8Array {
   if (typeof hex !== "string") {
     throw new TypeError("hexToBytes: expected string, got " + typeof hex);
