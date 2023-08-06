@@ -35,10 +35,11 @@ jsonInput.forEach((testCase, index) => {
     assert.deepStrictEqual(
       sp.createTransaction(inputs, recipients),
       testCase.expected.outputs.map((output) => {
-        const key = Object.keys(output)[0];
+        const address = output[0];
+	const value = output[1];
         return {
-          address: key,
-          value: output[key],
+          address: address,
+          value: value,
         };
       })
     );
