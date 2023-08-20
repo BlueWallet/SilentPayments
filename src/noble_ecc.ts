@@ -181,7 +181,6 @@ const _0n = BigInt(0);
 const _1n = BigInt(1);
 const _2n = BigInt(2);
 
-// @ts-ignore
 const POW_2_256 = _2n ** BigInt(256);
 
 const CURVE = {

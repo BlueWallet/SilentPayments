@@ -1,8 +1,10 @@
 {
   "extends": "@tsconfig/recommended/tsconfig.json",
   "compilerOptions": {
+    "target": "ES2016",
     "outDir": "./dist",
     "declaration": true,
+    "resolveJsonModule": true,
   },
   "include": [
     "src/**/*"

@@ -11,7 +11,7 @@ type UTXO = {
   txid: string;
   vout: number;
   WIF: string;
-  is_taproot: boolean;
+  is_taproot?: boolean;
 };
 
 type Target = {

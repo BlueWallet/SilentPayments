@@ -4,10 +4,23 @@ import { ECPairFactory } from "ecpair";
 
 import { SilentPayment } from "../src";
 import ecc from "../src/noble_ecc";
+import jsonImput from "./data/sending_test_vectors.json";
 
 const ECPair = ECPairFactory(ecc);
 
-const jsonInput = require("./data/sending_test_vectors.json");
+type TestCase = {
+  comment: string;
+  given: {
+    outpoints: [string, number][],
+    input_priv_keys: [string, boolean][],
+    recipients: [string, number][]
+  },
+  expected: {
+    outputs: [string, number][],
+  }
+}
+
+const tests = jsonImput as unknown as Array<TestCase>;
 
 it("smoke test", () => {
   const sp = new SilentPayment();
@@ -15,7 +28,7 @@ it("smoke test", () => {
 });
 
 /* Sending tests from the BIP352 test vectors */
-jsonInput.forEach((testCase, index) => {
+tests.forEach((testCase, index) => {
   // Prepare the 'inputs' array
   const inputs = testCase.given.outpoints.map((outpoint, idx) => ({
     txid: outpoint[0],
@@ -92,7 +105,7 @@ it("SilentPayment._outpointHash() works", () => {
       {
         txid: "a2365547d16b555593e3f58a2b67143fc8ab84e7e1257b1c13d2a9a2ec3a2efb",
         vout: 0,
-        WIF: "L4cJGJp4haLbS46ZKMKrjt7HqVuYTSHkChykdMrni955Fs3Sb8vq",
+        WIF: "",
       },
     ]).toString("hex"),
     "dc28dfeffd23899e1ec394a601ef543fa4f29c59e8548ceeca8f3b40fef5d041"
@@ -105,10 +118,12 @@ it("SilentPayment._outpointHash() works", () => {
       {
         txid: "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
         vout: 0,
+        WIF: "",
       },
       {
         txid: "a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d",
         vout: 0,
+        WIF: "",
       },
     ]).toString("hex"),
     "210fef5d624db17c965c7597e2c6c9f60ef440c831d149c43567c50158557f12"
