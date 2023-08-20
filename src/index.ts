@@ -140,7 +140,7 @@ export class SilentPayment {
       let key = ECPair.fromWIF(utxo.WIF).privateKey;
 
       if (key === undefined) {
-        continue;
+        throw new Error("No private key found for UTXO");
       }
 
       // If taproot, check if the seckey results in an odd y-value and negate if so
