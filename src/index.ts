@@ -1,9 +1,10 @@
+import * as crypto from "crypto";
+import { ECPairFactory } from "ecpair";
+import { bech32m } from "bech32";
+import * as bitcoin from "bitcoinjs-lib";
 import ecc from "./noble_ecc";
-const crypto = require("crypto");
-const ECPairFactory = require("ecpair").ECPairFactory;
-const { bech32m } = require("bech32");
+
 const ECPair = ECPairFactory(ecc);
-const bitcoin = require("bitcoinjs-lib");
 bitcoin.initEccLib(ecc);
 
 type UTXO = {
@@ -120,23 +121,42 @@ export class SilentPayment {
     return returnValue;
   }
 
+  /**
+   * Sums the private keys of the UTXOs
+   * @param utxos
+   * @returns {Buffer} The sum of the private keys
+   * @private
+   **/
   private static _sumPrivkeys(utxos: UTXO[]): Buffer {
-    let ret = ECPair.fromWIF(utxos[0].WIF).privateKey;
-
-    // If taproot, check if the seckey results in an odd y-value and negate if so
-    if (utxos[0].is_taproot && ecc.pointFromScalar(ret)![0] === 0x03) {
-      ret = Buffer.from(ecc.privateNegate(ret));
+    if (utxos.length === 0) {
+      throw new Error("No UTXOs provided");
     }
-    for (let c = 1; c < utxos.length; c++) {
-      let negated_key = ECPair.fromWIF(utxos[c].WIF).privateKey;
+
+    const keys: Array<Buffer> = []
+    for (const utxo of utxos) {
+      let key = ECPair.fromWIF(utxo.WIF).privateKey;
+
+      if (key === undefined) {
+        continue;
+      }
 
       // If taproot, check if the seckey results in an odd y-value and negate if so
-      if (utxos[c].is_taproot && ecc.pointFromScalar(negated_key)![0] === 0x03) {
-        negated_key = Buffer.from(ecc.privateNegate(negated_key));
+      if (utxo.is_taproot && ecc.pointFromScalar(key)![0] === 0x03) {
+        key = Buffer.from(ecc.privateNegate(key));
       }
-      ret = Buffer.from(ecc.privateAdd(ret, negated_key) as Uint8Array);
+
+      keys.push(key);
     }
 
-    return ret;
+    if (keys.length === 0) {
+      throw new Error("No UTXOs with private keys found");
+    }
+
+    // summary of every item in array
+    const res = keys.reduce((acc, key) => {
+      return Buffer.from(ecc.privateAdd(acc, key) as Uint8Array);
+    });
+
+    return res
   }
 }
