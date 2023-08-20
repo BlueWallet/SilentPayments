@@ -11,7 +11,7 @@ type UTXO = {
   txid: string;
   vout: number;
   WIF: string;
-  is_taproot?: boolean;
+  isTaproot?: boolean;
 };
 
 type Target = {
@@ -141,7 +141,7 @@ export class SilentPayment {
       }
 
       // If taproot, check if the seckey results in an odd y-value and negate if so
-      if (utxo.is_taproot && ecc.pointFromScalar(key)![0] === 0x03) {
+      if (utxo.isTaproot && ecc.pointFromScalar(key)![0] === 0x03) {
         key = Buffer.from(ecc.privateNegate(key));
       }
 
