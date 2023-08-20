@@ -1,10 +1,10 @@
 /* global it */
 import assert from "node:assert";
-import { SilentPayment } from "../index";
 import { ECPairFactory } from "ecpair";
-import ecc from "../noble_ecc";
-const bitcoin = require("bitcoinjs-lib");
-bitcoin.initEccLib(ecc);
+
+import { SilentPayment } from "../src";
+import ecc from "../src/noble_ecc";
+
 const ECPair = ECPairFactory(ecc);
 
 const jsonInput = require("./data/sending_test_vectors.json");
@@ -36,7 +36,7 @@ jsonInput.forEach((testCase, index) => {
       sp.createTransaction(inputs, recipients),
       testCase.expected.outputs.map((output) => {
         const address = output[0];
-	const value = output[1];
+        const value = output[1];
         return {
           address: address,
           value: value,
