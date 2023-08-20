@@ -39,7 +39,7 @@ export class SilentPayment {
   createTransaction(utxos: UTXO[], targets: Target[]): Target[] {
     const ret: Target[] = [];
 
-    let silentPaymentGroups: Array<SilentPaymentGroup> = [];
+    const silentPaymentGroups: Array<SilentPaymentGroup> = [];
     for (const target of targets) {
       if (!target.silentPaymentCode) {
         ret.push(target); // passthrough
@@ -56,7 +56,7 @@ export class SilentPayment {
         throw new Error("Unexpected version of silent payment code");
       }
       // Addresses with the same Bscan key all belong to the same recipient
-      let recipient = silentPaymentGroups.find((group) => Buffer.compare(group.Bscan, Bscan) === 0);
+      const recipient = silentPaymentGroups.find((group) => Buffer.compare(group.Bscan, Bscan) === 0);
       if (recipient) {
         recipient.BmValues.push([Bm, target.value]);
       } else {
@@ -101,7 +101,7 @@ export class SilentPayment {
 
   static _outpointsHash(parameters: UTXO[]): Buffer {
     let bufferConcat = Buffer.alloc(0);
-    let outpoints: Array<Buffer> = [];
+    const outpoints: Array<Buffer> = [];
     for (const parameter of parameters) {
       outpoints.push(Buffer.concat([Buffer.from(parameter.txid, "hex").reverse(), SilentPayment._ser32(parameter.vout).reverse()]));
     }
@@ -113,8 +113,11 @@ export class SilentPayment {
   }
 
   /**
-   * Serializes a 32-bit unsigned integer i as a 4-byte little-endian
-   */
+   * Serializes a 32-bit unsigned integer i as a 4-byte big-endian
+   * @param i {number} The number to serialize
+   * @returns {Buffer} The serialized number
+   * @private
+   * */
   static _ser32(i: number): Buffer {
     const returnValue = Buffer.allocUnsafe(4);
     returnValue.writeUInt32BE(i);
@@ -123,7 +126,7 @@ export class SilentPayment {
 
   /**
    * Sums the private keys of the UTXOs
-   * @param utxos
+   * @param utxos {UTXO[]}
    * @returns {Buffer} The sum of the private keys
    * @private
    **/
@@ -153,10 +156,10 @@ export class SilentPayment {
     }
 
     // summary of every item in array
-    const res = keys.reduce((acc, key) => {
+    const ret = keys.reduce((acc, key) => {
       return Buffer.from(ecc.privateAdd(acc, key) as Uint8Array);
     });
 
-    return res
+    return ret
   }
 }
