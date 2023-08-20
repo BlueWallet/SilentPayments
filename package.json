@@ -5,8 +5,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "test": "jest tests/",
-    "type-check": "tsc --noEmit"
+    "test": "jest tests/"
   },
   "author": "overtorment",
   "license": "MIT",

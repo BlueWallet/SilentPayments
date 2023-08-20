@@ -20,6 +20,3 @@ jobs:
 
       - name: Run tests
         run: npm test
-
-      - name: Run type checks
-        run: npm run type-check

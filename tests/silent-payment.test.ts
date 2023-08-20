@@ -103,7 +103,7 @@ it("SilentPayment._outpointHash() works", () => {
       {
         txid: "a2365547d16b555593e3f58a2b67143fc8ab84e7e1257b1c13d2a9a2ec3a2efb",
         vout: 0,
-        WIF: "",
+        WIF: "L4cJGJp4haLbS46ZKMKrjt7HqVuYTSHkChykdMrni955Fs3Sb8vq",
       },
     ]).toString("hex"),
     "dc28dfeffd23899e1ec394a601ef543fa4f29c59e8548ceeca8f3b40fef5d041"
