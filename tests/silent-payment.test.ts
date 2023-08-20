@@ -1,6 +1,5 @@
 import assert from "node:assert";
 import { ECPairFactory } from "ecpair";
-
 import { SilentPayment } from "../src";
 import ecc from "../src/noble_ecc";
 import jsonImput from "./data/sending_test_vectors.json";
