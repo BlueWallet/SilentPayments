@@ -1,4 +1,3 @@
-/* global it */
 import assert from "node:assert";
 import { ECPairFactory } from "ecpair";
 
@@ -34,7 +33,7 @@ tests.forEach((testCase, index) => {
     txid: outpoint[0],
     vout: outpoint[1],
     WIF: ECPair.fromPrivateKey(Buffer.from(testCase.given.input_priv_keys[idx][0], "hex")).toWIF(),
-    is_taproot: testCase.given.input_priv_keys[idx][1],
+    isTaproot: testCase.given.input_priv_keys[idx][1],
   }));
 
   // Prepare the 'recipients' array

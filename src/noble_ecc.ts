@@ -186,7 +186,6 @@ const POW_2_256 = _2n ** BigInt(256);
 const CURVE = {
   a: _0n,
   b: BigInt(7),
-  // @ts-ignore
   P: POW_2_256 - _2n ** BigInt(32) - BigInt(977),
   n: POW_2_256 - BigInt("432420386565659656852420866394968145599"),
   h: _1n,
