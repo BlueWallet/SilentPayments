@@ -46,15 +46,15 @@ export class SilentPayment {
         continue;
       }
 
-      const result = bech32m.decode(target.silentPaymentCode, 117);
+      const result = bech32m.decode(target.silentPaymentCode, 118);
       const version = result.words.shift();
+      if (version !== 0) {
+        throw new Error("Unexpected version of silent payment code");
+      }
       const data = bech32m.fromWords(result.words);
       const Bscan = Buffer.from(data.slice(0, 33));
       const Bm = Buffer.from(data.slice(33));
 
-      if (version !== 0) {
-        throw new Error("Unexpected version of silent payment code");
-      }
       // Addresses with the same Bscan key all belong to the same recipient
       const recipient = silentPaymentGroups.find((group) => Buffer.compare(group.Bscan, Bscan) === 0);
       if (recipient) {

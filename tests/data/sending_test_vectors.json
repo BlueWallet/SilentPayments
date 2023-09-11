@@ -39,6 +39,45 @@
     }
   },
   {
+    "comment": "Simple send: two inputs, regtest",
+    "given": {
+      "outpoints": [
+        [
+          "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
+          0
+        ],
+        [
+          "a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d",
+          0
+        ]
+      ],
+      "input_priv_keys": [
+        [
+          "eadc78165ff1f8ea94ad7cfdc54990738a4c53f6e0507b42154201b8e5dff3b1",
+          false
+        ],
+        [
+          "93f5ed907ad5b2bdbbdcb5d9116ebc0a4e1f92f910d5260237fa45a9408aad16",
+          false
+        ]
+      ],
+      "recipients": [
+        [
+          "sprt1qqw4c54wvvwt6m38rg6vz3gs46ukhtrqr6qttd9akwaqjkx0znnme6qertwh7y9gq3zy4hhlk7tlgssyuvvmgl9stw8catdph0zc3wayd9y4rrztx",
+          1
+        ]
+      ]
+    },
+    "expected": {
+      "outputs": [
+        [
+          "848b21b6ab50bf12ea5829955b9557cd6d7c3e0e2b7a5448d9e46a6a935b69a2",
+          1
+        ]
+      ]
+    }
+  },
+  {
     "comment": "Simple send: two inputs, order reversed",
     "given": {
       "outpoints": [
