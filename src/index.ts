@@ -80,30 +80,29 @@ export class SilentPayment {
     const A = Buffer.from(ecc.pointFromScalar(a) as Uint8Array);
     const outpoint_hash = SilentPayment._outpointsHash(utxos, A);
 
-    // Generating Pmn for each Bm in the group
+    // Generating Pmk for each Bm in the group
     for (const group of silentPaymentGroups) {
       // Bscan * a * outpoint_hash
       const ecdh_shared_secret_step1 = Buffer.from(ecc.privateMultiply(outpoint_hash, a) as Uint8Array);
       const ecdh_shared_secret = ecc.pointMultiply(group.Bscan, ecdh_shared_secret_step1);
 
-      let n = 0;
+      let k = 0;
       for (const [Bm, amount] of group.BmValues) {
-        const tn = taggedHash(
+        const tk = taggedHash(
             "BIP0352/SharedSecret",
-            Buffer.concat([ecdh_shared_secret!, SilentPayment._ser32(n)])
+            Buffer.concat([ecdh_shared_secret!, SilentPayment._ser32(k)])
         );
 
-        // Let Pmn = tn·G + Bm
-        const Pmn = Buffer.from(ecc.pointAdd(ecc.pointMultiply(G, tn) as Uint8Array, Bm) as Uint8Array);
+        // Let Pmk = tk·G + Bm
+        const Pmk = Buffer.from(ecc.pointAdd(ecc.pointMultiply(G, tk) as Uint8Array, Bm) as Uint8Array);
 
-        // Encode Pmn as a BIP341 taproot output
-        const address = Pmn.slice(1).toString("hex");
+        // Encode Pmk as a BIP341 taproot output
+        const address = Pmk.slice(1).toString("hex");
         const newTarget: Target = { address };
         newTarget.value = amount;
         ret.push(newTarget);
-        n += 1;
+        k += 1;
       }
-      n += 1;
     }
     return ret;
   }
