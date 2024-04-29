@@ -26,6 +26,13 @@ type SilentPaymentGroup = {
   BmValues: Array<[Buffer, number | undefined]>;
 };
 
+function taggedHash(tag: string, data: Buffer): Buffer {
+    const hash = crypto.createHash('sha256');
+    const tagHash = hash.update(tag, 'utf-8').digest();
+    const ss = Buffer.concat([tagHash, tagHash, data]);
+    return crypto.createHash('sha256').update(ss).digest();
+}
+
 const G = Buffer.from("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798", "hex");
 
 export class SilentPayment {
@@ -70,7 +77,8 @@ export class SilentPayment {
     if (silentPaymentGroups.length === 0) return ret; // passthrough
 
     const a = SilentPayment._sumPrivkeys(utxos);
-    const outpoint_hash = SilentPayment._outpointsHash(utxos);
+    const A = Buffer.from(ecc.pointFromScalar(a) as Uint8Array);
+    const outpoint_hash = SilentPayment._outpointsHash(utxos, A);
 
     // Generating Pmn for each Bm in the group
     for (const group of silentPaymentGroups) {
@@ -80,10 +88,10 @@ export class SilentPayment {
 
       let n = 0;
       for (const [Bm, amount] of group.BmValues) {
-        const tn = crypto
-          .createHash("sha256")
-          .update(Buffer.concat([ecdh_shared_secret!, SilentPayment._ser32(n)]))
-          .digest();
+        const tn = taggedHash(
+            "BIP0352/SharedSecret",
+            Buffer.concat([ecdh_shared_secret!, SilentPayment._ser32(n)])
+        );
 
         // Let Pmn = tn·G + Bm
         const Pmn = Buffer.from(ecc.pointAdd(ecc.pointMultiply(G, tn) as Uint8Array, Bm) as Uint8Array);
@@ -100,17 +108,15 @@ export class SilentPayment {
     return ret;
   }
 
-  static _outpointsHash(parameters: UTXO[]): Buffer {
+  static _outpointsHash(parameters: UTXO[], A: Buffer): Buffer {
     let bufferConcat = Buffer.alloc(0);
     const outpoints: Array<Buffer> = [];
     for (const parameter of parameters) {
       outpoints.push(Buffer.concat([Buffer.from(parameter.txid, "hex").reverse(), SilentPayment._ser32(parameter.vout).reverse()]));
     }
     outpoints.sort(Buffer.compare);
-    for (const outpoint of outpoints) {
-      bufferConcat = Buffer.concat([bufferConcat, outpoint]);
-    }
-    return crypto.createHash("sha256").update(bufferConcat).digest();
+    const smallest_outpoint = outpoints[0];
+    return taggedHash("BIP0352/Inputs", Buffer.concat([Buffer.from(smallest_outpoint), Buffer.from(A)]));
   }
 
   /**
