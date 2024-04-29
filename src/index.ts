@@ -7,11 +7,12 @@ import ecc from "./noble_ecc";
 const ECPair = ECPairFactory(ecc);
 bitcoin.initEccLib(ecc);
 
+export type UTXOType = 'p2wpkh' | 'p2sh-p2wpkh' | 'p2pkh' | 'p2tr' | 'non-eligible';
 type UTXO = {
   txid: string;
   vout: number;
   WIF: string;
-  isTaproot?: boolean;
+  utxoType: UTXOType;
 };
 
 type Target = {
@@ -138,21 +139,36 @@ export class SilentPayment {
     const keys: Array<Buffer> = []
     for (const utxo of utxos) {
       let key = ECPair.fromWIF(utxo.WIF).privateKey;
+      switch (utxo.utxoType) {
+        case 'non-eligible':
+            // Non-eligible UTXOs can be spent in the transaction, but are not used for the
+            // shared secret derivation. Note: we don't check that the private key is valid
+            // for non-eligible utxos because its possible the sender is following a different
+            // signing protocol for these utxos. For silent payments eligible utxos, we require
+            // access to the private key.
+            break;
+        case 'p2tr':
+          if (key === undefined) {
+            throw new Error("No private key found for eligible UTXO");
+          }
 
-      if (key === undefined) {
-        throw new Error("No private key found for UTXO");
+          // For taproot, check if the seckey results in an odd y-value and negate if so
+          if (ecc.pointFromScalar(key)![0] === 0x03) {
+            key = Buffer.from(ecc.privateNegate(key));
+          }
+        case 'p2wpkh':
+        case 'p2sh-p2wpkh':
+        case 'p2pkh':
+          if (key === undefined) {
+            throw new Error("No private key found for eligible UTXO");
+          }
+          keys.push(key);
+          break;
       }
-
-      // If taproot, check if the seckey results in an odd y-value and negate if so
-      if (utxo.isTaproot && ecc.pointFromScalar(key)![0] === 0x03) {
-        key = Buffer.from(ecc.privateNegate(key));
-      }
-
-      keys.push(key);
     }
 
     if (keys.length === 0) {
-      throw new Error("No UTXOs with private keys found");
+      throw new Error("No eligible UTXOs with private keys found");
     }
 
     // summary of every item in array
