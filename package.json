@@ -1,9 +1,8 @@
 {
   "name": "silent-payments",
-  "version": "0.2.0",
-  "description": "",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "version": "0.3.0",
+  "description": "BIP-352",
+  "main": "src/index.ts",
   "scripts": {
     "test": "jest tests/"
   },
