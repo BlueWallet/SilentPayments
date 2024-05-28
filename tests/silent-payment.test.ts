@@ -157,3 +157,18 @@ it("SilentPayment._ser32() works", () => {
   assert.strictEqual(SilentPayment._ser32(1).toString("hex"), "00000001");
   assert.strictEqual(SilentPayment._ser32(444).toString("hex"), "000001bc");
 });
+
+it("can validate payment code", () => {
+  assert.ok(SilentPayment.isPaymentCodeValid("sp1qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqjuexzk6murw56suy3e0rd2cgqvycxttddwsvgxe2usfpxumr70xc9pkqwv"));
+  assert.ok(SilentPayment.isPaymentCodeValid("sp1qqgrz6j0lcqnc04vxccydl0kpsj4frfje0ktmgcl2t346hkw30226xqupawdf48k8882j0strrvcmgg2kdawz53a54dd376ngdhak364hzcmynqtn"));
+  assert.ok(SilentPayment.isPaymentCodeValid("sp1qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqjex54dmqmmv6rw353tsuqhs99ydvadxzrsy9nuvk74epvee55drs734pqq"));
+  assert.ok(SilentPayment.isPaymentCodeValid("sp1qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqsg59z2rppn4qlkx0yz9sdltmjv3j8zgcqadjn4ug98m3t6plujsq9qvu5n"));
+  assert.ok(SilentPayment.isPaymentCodeValid("sp1qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgq7c2zfthc6x3a5yecwc52nxa0kfd20xuz08zyrjpfw4l2j257yq6qgnkdh5"));
+
+  assert.ok(!SilentPayment.isPaymentCodeValid("sp1qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgq7c2zfthc6x3a5yecwc52nxa0kfd20xuz08zyrjpfw4l2j257yq6qgn")); // short a few symbols
+  assert.ok(!SilentPayment.isPaymentCodeValid("sp1qq")); // short a few symbols
+  assert.ok(!SilentPayment.isPaymentCodeValid("garbage"));
+  assert.ok(!SilentPayment.isPaymentCodeValid("sp2qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgq7c2zfthc6x3a5yecwc52nxa0kfd20xuz08zyrjpfw4l2j257yq6qgnkdh5")); // wrong prefix
+  assert.ok(!SilentPayment.isPaymentCodeValid("qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqjuexzk6murw56suy3e0rd2cgqvycxttddwsvgxe2usfpxumr70xc9pkqwv")); // no prefix
+  assert.ok(!SilentPayment.isPaymentCodeValid("qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqjuexzk6murw56suy3e0rd2cgqvycxttddwsvgxe2usfpxumr70xc9pkqwv123")); // no prefix
+});
