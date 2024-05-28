@@ -183,4 +183,18 @@ export class SilentPayment {
 
     return ret
   }
+
+  static isPaymentCodeValid(pc: string) {
+    try {
+      const result = bech32m.decode(pc, 118);
+      const version = result.words.shift();
+      if (version !== 0) {
+        return false;
+      }
+    } catch (_) {
+      return false;
+    }
+
+    return true;
+  }
 }
