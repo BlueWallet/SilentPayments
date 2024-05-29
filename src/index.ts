@@ -7,30 +7,30 @@ import ecc from "./noble_ecc";
 const ECPair = ECPairFactory(ecc);
 bitcoin.initEccLib(ecc);
 
-export type UTXOType = 'p2wpkh' | 'p2sh-p2wpkh' | 'p2pkh' | 'p2tr' | 'non-eligible';
-type UTXO = {
+export type UTXOType = "p2wpkh" | "p2sh-p2wpkh" | "p2pkh" | "p2tr" | "non-eligible";
+
+export type UTXO = {
   txid: string;
   vout: number;
-  WIF: string;
+  wif: string;
   utxoType: UTXOType;
 };
 
-type Target = {
-  silentPaymentCode?: string;
-  address?: string;
+export type Target = {
+  address: string; // either address or payment code
   value?: number;
 };
 
-type SilentPaymentGroup = {
+export type SilentPaymentGroup = {
   Bscan: Buffer;
   BmValues: Array<[Buffer, number | undefined]>;
 };
 
 function taggedHash(tag: string, data: Buffer): Buffer {
-    const hash = crypto.createHash('sha256');
-    const tagHash = hash.update(tag, 'utf-8').digest();
-    const ss = Buffer.concat([tagHash, tagHash, data]);
-    return crypto.createHash('sha256').update(ss).digest();
+  const hash = crypto.createHash("sha256");
+  const tagHash = hash.update(tag, "utf-8").digest();
+  const ss = Buffer.concat([tagHash, tagHash, data]);
+  return crypto.createHash("sha256").update(ss).digest();
 }
 
 const G = Buffer.from("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798", "hex");
@@ -49,12 +49,12 @@ export class SilentPayment {
 
     const silentPaymentGroups: Array<SilentPaymentGroup> = [];
     for (const target of targets) {
-      if (!target.silentPaymentCode) {
+      if (!target.address.startsWith("sp1")) {
         ret.push(target); // passthrough
         continue;
       }
 
-      const result = bech32m.decode(target.silentPaymentCode, 118);
+      const result = bech32m.decode(target.address, 118);
       const version = result.words.shift();
       if (version !== 0) {
         throw new Error("Unexpected version of silent payment code");
@@ -88,10 +88,7 @@ export class SilentPayment {
 
       let k = 0;
       for (const [Bm, amount] of group.BmValues) {
-        const tk = taggedHash(
-            "BIP0352/SharedSecret",
-            Buffer.concat([ecdh_shared_secret!, SilentPayment._ser32(k)])
-        );
+        const tk = taggedHash("BIP0352/SharedSecret", Buffer.concat([ecdh_shared_secret!, SilentPayment._ser32(k)]));
 
         // Let Pmk = tk·G + Bm
         const Pmk = Buffer.from(ecc.pointAdd(ecc.pointMultiply(G, tk) as Uint8Array, Bm) as Uint8Array);
@@ -141,18 +138,18 @@ export class SilentPayment {
       throw new Error("No UTXOs provided");
     }
 
-    const keys: Array<Buffer> = []
+    const keys: Array<Buffer> = [];
     for (const utxo of utxos) {
-      let key = ECPair.fromWIF(utxo.WIF).privateKey;
+      let key = ECPair.fromWIF(utxo.wif).privateKey;
       switch (utxo.utxoType) {
-        case 'non-eligible':
-            // Non-eligible UTXOs can be spent in the transaction, but are not used for the
-            // shared secret derivation. Note: we don't check that the private key is valid
-            // for non-eligible utxos because its possible the sender is following a different
-            // signing protocol for these utxos. For silent payments eligible utxos, we require
-            // access to the private key.
-            break;
-        case 'p2tr':
+        case "non-eligible":
+          // Non-eligible UTXOs can be spent in the transaction, but are not used for the
+          // shared secret derivation. Note: we don't check that the private key is valid
+          // for non-eligible utxos because its possible the sender is following a different
+          // signing protocol for these utxos. For silent payments eligible utxos, we require
+          // access to the private key.
+          break;
+        case "p2tr":
           if (key === undefined) {
             throw new Error("No private key found for eligible UTXO");
           }
@@ -161,9 +158,9 @@ export class SilentPayment {
           if (ecc.pointFromScalar(key)![0] === 0x03) {
             key = Buffer.from(ecc.privateNegate(key));
           }
-        case 'p2wpkh':
-        case 'p2sh-p2wpkh':
-        case 'p2pkh':
+        case "p2wpkh":
+        case "p2sh-p2wpkh":
+        case "p2pkh":
           if (key === undefined) {
             throw new Error("No private key found for eligible UTXO");
           }
@@ -181,7 +178,7 @@ export class SilentPayment {
       return Buffer.from(ecc.privateAdd(acc, key) as Uint8Array);
     });
 
-    return ret
+    return ret;
   }
 
   static isPaymentCodeValid(pc: string) {
