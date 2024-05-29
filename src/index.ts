@@ -17,7 +17,7 @@ export type UTXO = {
 };
 
 export type Target = {
-  address: string; // either address or payment code
+  address?: string; // either address or payment code
   value?: number;
 };
 
@@ -49,7 +49,7 @@ export class SilentPayment {
 
     const silentPaymentGroups: Array<SilentPaymentGroup> = [];
     for (const target of targets) {
-      if (!target.address.startsWith("sp1")) {
+      if (!target.address?.startsWith("sp1")) {
         ret.push(target); // passthrough
         continue;
       }
