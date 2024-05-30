@@ -1,6 +1,6 @@
 {
   "name": "silent-payments",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "BIP-352",
   "main": "src/index.ts",
   "scripts": {
