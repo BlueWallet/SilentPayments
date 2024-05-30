@@ -118,6 +118,56 @@ it("2 inputs - 0 SP outputs (just a passthrough)", () => {
   );
 });
 
+it("2 inputs - 1 SP output, 1 legacy, 1change (should not rearrange order of inputs )", () => {
+  const sp = new SilentPayment();
+  assert.deepStrictEqual(
+    sp.createTransaction(
+      [
+        {
+          txid: "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
+          vout: 0,
+          wif: ECPair.fromPrivateKey(Buffer.from("1cd5e8f6b3f29505ed1da7a5806291ebab6491c6a172467e44debe255428a192", "hex")).toWIF(),
+          utxoType: "p2wpkh",
+        },
+        {
+          txid: "a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d",
+          vout: 0,
+          wif: ECPair.fromPrivateKey(Buffer.from("7416ef4d92e4dd09d680af6999d1723816e781c030f4b4ecb5bf46939ca30056", "hex")).toWIF(),
+          utxoType: "p2wpkh",
+        },
+      ],
+      [
+        {
+          address: "3FiYaHYHQTmD8n2SJxVYobDeN1uQKvzkLe",
+          value: 11_111,
+        },
+        {
+          address: "sp1qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqjuexzk6murw56suy3e0rd2cgqvycxttddwsvgxe2usfpxumr70xc9pkqwv",
+          value: 22_222,
+        },
+        {
+          // no address, which should be interpreted as change
+          value: 33_333,
+        },
+      ]
+    ),
+    [
+      {
+        address: "3FiYaHYHQTmD8n2SJxVYobDeN1uQKvzkLe",
+        value: 11_111,
+      },
+      {
+        address: "bc1pszgngkje7t5j3mvdw8xc5l3q7n28awdwl8pena6hrvxgg83lnpmsme6u6j", // unwrapped from SP
+        value: 22_222,
+      },
+      {
+        // no address, which should be interpreted as change
+        value: 33_333,
+      },
+    ]
+  );
+});
+
 it("SilentPayment._outpointHash() works", () => {
   const A = ECPair.fromWIF("L4cJGJp4haLbS46ZKMKrjt7HqVuYTSHkChykdMrni955Fs3Sb8vq").publicKey;
   assert.deepStrictEqual(
