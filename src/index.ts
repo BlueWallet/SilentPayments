@@ -94,7 +94,7 @@ export class SilentPayment {
         const Pmk = Buffer.from(ecc.pointAdd(ecc.pointMultiply(G, tk) as Uint8Array, Bm) as Uint8Array);
 
         // Encode Pmk as a BIP341 taproot output
-        const address = Pmk.slice(1).toString("hex");
+        const address = SilentPayment.pubkeyToAddress(Pmk.slice(1).toString("hex"));
         const newTarget: Target = { address };
         newTarget.value = amount;
         ret.push(newTarget);
@@ -193,5 +193,14 @@ export class SilentPayment {
     }
 
     return true;
+  }
+
+  static pubkeyToAddress(hex: string): string {
+    const publicKey = Buffer.from("5120" + hex, "hex");
+    return bitcoin.address.fromOutputScript(publicKey, bitcoin.networks.bitcoin);
+  }
+
+  static addressToPubkey(address: string): string {
+    return bitcoin.address.toOutputScript(address).subarray(2).toString("hex");
   }
 }

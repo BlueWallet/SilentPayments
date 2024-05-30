@@ -69,7 +69,7 @@ tests.forEach((testCase, index) => {
         }).toThrow("No eligible UTXOs with private keys found");
       } else {
         const generated = sp.createTransaction(utxos, recipients);
-        const generated_pubkeys: string[] = generated.map((obj) => obj.address).filter(Boolean) as string[];
+        const generated_pubkeys: string[] = generated.map((obj) => SilentPayment.addressToPubkey(String(obj.address))).filter(Boolean) as string[];
         assert(matchSubset(generated_pubkeys, sending.expected.outputs));
       }
     });
@@ -175,4 +175,16 @@ it("can validate payment code", () => {
   assert.ok(!SilentPayment.isPaymentCodeValid("sp2qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgq7c2zfthc6x3a5yecwc52nxa0kfd20xuz08zyrjpfw4l2j257yq6qgnkdh5")); // wrong prefix
   assert.ok(!SilentPayment.isPaymentCodeValid("qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqjuexzk6murw56suy3e0rd2cgqvycxttddwsvgxe2usfpxumr70xc9pkqwv")); // no prefix
   assert.ok(!SilentPayment.isPaymentCodeValid("qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqjuexzk6murw56suy3e0rd2cgqvycxttddwsvgxe2usfpxumr70xc9pkqwv123")); // no prefix
+});
+
+it("can turn pubkey into taproot address", () => {
+  assert.strictEqual(SilentPayment.pubkeyToAddress("40ef293a8a0ebaf8b351a27d89ff4b5b3822a635e4afdca77a30170c363bafa3"), "bc1pgrhjjw52p6a03v635f7cnl6ttvuz9f34ujhaefm6xqtscd3m473szkl92g");
+
+  expect(() => {
+    SilentPayment.pubkeyToAddress("512040ef293a8a0ebaf8b351a27d89ff4b5b3822a635e4afdca77a30170c363bafa3");
+  }).toThrow(/has no matching Address/);
+});
+
+it("can turn taproot address into pubkey", () => {
+  assert.strictEqual(SilentPayment.addressToPubkey("bc1pgrhjjw52p6a03v635f7cnl6ttvuz9f34ujhaefm6xqtscd3m473szkl92g"), "40ef293a8a0ebaf8b351a27d89ff4b5b3822a635e4afdca77a30170c363bafa3");
 });
