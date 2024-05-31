@@ -1,4 +1,4 @@
-# SilentPayments
+# SilentPayments (BIP-352)
 
 Send bitcoins to SilentPayment static payment codes, in pure typescript.
 
