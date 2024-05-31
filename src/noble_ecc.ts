@@ -58,6 +58,10 @@ const ecc = {
       return { parity, xOnlyPubkey: P.slice(1) };
     }),
 
+  getSharedSecret: (sk: Uint8Array, pk: Uint8Array, compressed?: boolean): Uint8Array => {
+    return necc.getSharedSecret(sk, pk, defaultTrue(compressed));
+  },
+
   pointFromScalar: (sk: Uint8Array, compressed?: boolean): Uint8Array | null => throwToNull(() => necc.getPublicKey(sk, defaultTrue(compressed))),
 
   pointCompress: (p: Uint8Array, compressed?: boolean): Uint8Array => {
