@@ -1,7 +1,76 @@
 # SilentPayments
 
+Send bitcoins to SilentPayment static payment codes, in pure typescript.
+
+## Usage
+
+- `npm i "github:BlueWallet/SilentPayments" --save`
+
+Library is implemented in pure typescript _without_ js-compiled version committed - you might need to configure javascript build on your side.
+For example, to use it in `jest` tests:
+
+`package.json`:
+```json
+  "jest": {
+    "transform": {
+      "^.+\\.(ts|tsx)$": "ts-jest"
+    },
+    "transformIgnorePatterns": [
+      "node_modules/(?!((jest-)?react-native(-.*)?|@react-native(-community)?)|silent-payments/)"
+    ],
+```
+
+You must provide UTXOs and targets (which might or might not include SilentPayment codes):
+
+```typescript
+createTransaction(utxos: UTXO[], targets: Target[]): Target[]
+```
+
+Finally:
+
+```typescript
+
+const sp = new SilentPayment();
+
+const targets = sp.createTransaction(
+      [
+        {
+          txid: "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
+          vout: 0,
+          wif: ECPair.fromPrivateKey(Buffer.from("1cd5e8f6b3f29505ed1da7a5806291ebab6491c6a172467e44debe255428a192", "hex")).toWIF(),
+          utxoType: "p2wpkh",
+        },
+      ],
+      [
+        {
+          address: "3FiYaHYHQTmD8n2SJxVYobDeN1uQKvzkLe",
+          value: 11_111,
+        },
+        {
+          address: "sp1qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqjuexzk6murw56suy3e0rd2cgqvycxttddwsvgxe2usfpxumr70xc9pkqwv",
+          value: 22_222,
+        },
+        {
+          // no address, which should be interpreted as change
+          value: 33_333,
+        },
+      ]
+    ),
+```
+
+Library will unwrap `sp1...` codes into correct receivers address. You _must_ provide correct UTXO types to the library, and you _must_ use the same UTXOs
+in an actual transaction you create. Library will _not_ do coin selection for you.
+
+
+
+## Development
+
 - `npm i`
 - `npm t`
+
+## License
+
+MIT
 
 ## References
 
