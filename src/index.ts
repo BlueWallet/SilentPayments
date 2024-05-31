@@ -84,7 +84,7 @@ export class SilentPayment {
     for (const group of silentPaymentGroups) {
       // Bscan * a * outpoint_hash
       const ecdh_shared_secret_step1 = Buffer.from(ecc.privateMultiply(outpoint_hash, a) as Uint8Array);
-      const ecdh_shared_secret = ecc.pointMultiply(group.Bscan, ecdh_shared_secret_step1);
+      const ecdh_shared_secret = Buffer.from(ecc.getSharedSecret(ecdh_shared_secret_step1, group.Bscan) as Uint8Array);
 
       let k = 0;
       for (const [Bm, amount] of group.BmValues) {
