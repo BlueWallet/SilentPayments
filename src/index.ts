@@ -23,7 +23,7 @@ export type Target = {
 
 export type SilentPaymentGroup = {
   Bscan: Buffer;
-  BmValues: Array<[Buffer, number | undefined]>;
+  BmValues: Array<[Buffer, number | undefined, number]>;
 };
 
 function taggedHash(tag: string, data: Buffer): Buffer {
@@ -45,12 +45,13 @@ export class SilentPayment {
    * Numeric values (if present) for targets are passed through.
    */
   createTransaction(utxos: UTXO[], targets: Target[]): Target[] {
-    const ret: Target[] = [];
+    const ret: Target[] = new Array(targets.length);
 
     const silentPaymentGroups: Array<SilentPaymentGroup> = [];
-    for (const target of targets) {
+    for (let i = 0; i < targets.length; i++) {
+      const target = targets[i];
       if (!target.address?.startsWith("sp1")) {
-        ret.push(target); // passthrough
+        ret[i] = target; // passthrough
         continue;
       }
 
@@ -66,11 +67,11 @@ export class SilentPayment {
       // Addresses with the same Bscan key all belong to the same recipient
       const recipient = silentPaymentGroups.find((group) => Buffer.compare(group.Bscan, Bscan) === 0);
       if (recipient) {
-        recipient.BmValues.push([Bm, target.value]);
+        recipient.BmValues.push([Bm, target.value, i]);
       } else {
         silentPaymentGroups.push({
           Bscan: Bscan,
-          BmValues: [[Bm, target.value]],
+          BmValues: [[Bm, target.value, i]],
         });
       }
     }
@@ -87,7 +88,7 @@ export class SilentPayment {
       const ecdh_shared_secret = Buffer.from(ecc.getSharedSecret(ecdh_shared_secret_step1, group.Bscan) as Uint8Array);
 
       let k = 0;
-      for (const [Bm, amount] of group.BmValues) {
+      for (const [Bm, amount, i] of group.BmValues) {
         const tk = taggedHash("BIP0352/SharedSecret", Buffer.concat([ecdh_shared_secret!, SilentPayment._ser32(k)]));
 
         // Let Pmk = tk·G + Bm
@@ -97,7 +98,7 @@ export class SilentPayment {
         const address = SilentPayment.pubkeyToAddress(Pmk.slice(1).toString("hex"));
         const newTarget: Target = { address };
         newTarget.value = amount;
-        ret.push(newTarget);
+        ret[i] = newTarget;
         k += 1;
       }
     }
