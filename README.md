@@ -2,7 +2,7 @@
 
 Send bitcoins to SilentPayment static payment codes, in pure typescript.
 
-## Usage
+## Installation
 
 - `npm i "github:BlueWallet/SilentPayments" --save`
 
@@ -19,6 +19,31 @@ For example, to use it in `jest` tests:
       "node_modules/(?!((jest-)?react-native(-.*)?|@react-native(-community)?)|silent-payments/)"
     ],
 ```
+If youre using webpack you might need to add a loader in `webpack.config.js`:
+
+
+```js
+...
+    {
+        test: /node_modules\/silent-payments\/.*\.ts$/,
+        use: [
+          {
+            loader: require.resolve('ts-loader'),
+            options: {
+              getCustomTransformers: () => ({
+                before: [isDevelopment && ReactRefreshTypeScript()].filter(
+                  Boolean
+                ),
+              }),
+              transpileOnly: isDevelopment,
+            },
+          },
+        ],
+      },
+...
+```
+
+## Usage
 
 You must provide UTXOs and targets (which might or might not include SilentPayment codes):
 
