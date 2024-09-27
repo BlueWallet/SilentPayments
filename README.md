@@ -19,7 +19,7 @@ For example, to use it in `jest` tests:
       "node_modules/(?!((jest-)?react-native(-.*)?|@react-native(-community)?)|silent-payments/)"
     ],
 ```
-If youre using webpack you might need to add a loader in `webpack.config.js`:
+If youre using webpack you might need to add a loader in `webpack.config.js`, something like this:
 
 
 ```js
@@ -30,6 +30,7 @@ If youre using webpack you might need to add a loader in `webpack.config.js`:
           {
             loader: require.resolve('ts-loader'),
             options: {
+              allowTsInNodeModules: true,
               getCustomTransformers: () => ({
                 before: [isDevelopment && ReactRefreshTypeScript()].filter(
                   Boolean
