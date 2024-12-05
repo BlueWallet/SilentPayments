@@ -49,7 +49,7 @@ If youre using webpack you might need to add a loader in `webpack.config.js`, so
 You must provide UTXOs and targets (which might or might not include SilentPayment codes):
 
 ```typescript
-createTransaction(utxos: UTXO[], targets: Target[]): Target[]
+createTransaction(utxos: UTXO[], targets: Target[]): Target[])
 ```
 
 Finally:
