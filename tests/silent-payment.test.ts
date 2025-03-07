@@ -1,7 +1,9 @@
-import assert from "node:assert";
 import { ECPairFactory } from "ecpair";
+import assert from "node:assert";
+import { expect, it } from 'vitest';
 import { SilentPayment, UTXOType } from "../src";
 import ecc from "../src/noble_ecc";
+import { uint8ArrayToHex } from '../src/uint8array-extras';
 import { Vin, getUTXOType } from "../tests/utils";
 import jsonInput from "./data/sending_test_vectors.json";
 
@@ -171,7 +173,7 @@ it("2 inputs - 1 SP output, 1 legacy, 1change (should not rearrange order of inp
 it("SilentPayment._outpointHash() works", () => {
   const A = ECPair.fromWIF("L4cJGJp4haLbS46ZKMKrjt7HqVuYTSHkChykdMrni955Fs3Sb8vq").publicKey;
   assert.deepStrictEqual(
-    SilentPayment._outpointsHash(
+    uint8ArrayToHex(SilentPayment._outpointsHash(
       [
         {
           txid: "a2365547d16b555593e3f58a2b67143fc8ab84e7e1257b1c13d2a9a2ec3a2efb",
@@ -181,11 +183,11 @@ it("SilentPayment._outpointHash() works", () => {
         },
       ],
       A
-    ).toString("hex"),
+    )),
     "94d5923201f2f239e4d2d5a44239e0377325a343e4c068cfd078217adc663d7c"
   );
   assert.deepStrictEqual(
-    SilentPayment._outpointsHash(
+    uint8ArrayToHex(SilentPayment._outpointsHash(
       [
         {
           txid: "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
@@ -201,15 +203,15 @@ it("SilentPayment._outpointHash() works", () => {
         },
       ],
       A
-    ).toString("hex"),
+    )),
     "3ea0693eeb0c7e848ad7b875f1998e9ed02905e88a6f5c45f25fa187b7f073d2"
   );
 });
 
 it("SilentPayment._ser32() works", () => {
-  assert.strictEqual(SilentPayment._ser32(0).toString("hex"), "00000000");
-  assert.strictEqual(SilentPayment._ser32(1).toString("hex"), "00000001");
-  assert.strictEqual(SilentPayment._ser32(444).toString("hex"), "000001bc");
+  assert.strictEqual(uint8ArrayToHex(SilentPayment._ser32(0)), "00000000");
+  assert.strictEqual(uint8ArrayToHex(SilentPayment._ser32(1)), "00000001");
+  assert.strictEqual(uint8ArrayToHex(SilentPayment._ser32(444)), "000001bc");
 });
 
 it("can validate payment code", () => {

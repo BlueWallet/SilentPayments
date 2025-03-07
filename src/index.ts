@@ -3,6 +3,7 @@ import { ECPairFactory } from "ecpair";
 import { bech32m } from "bech32";
 import * as bitcoin from "bitcoinjs-lib";
 import ecc from "./noble_ecc";
+import { compareUint8Arrays, concatUint8Arrays, hexToUint8Array, uint8ArrayToHex } from "./uint8array-extras";
 
 const ECPair = ECPairFactory(ecc);
 bitcoin.initEccLib(ecc);
@@ -22,18 +23,18 @@ export type Target = {
 };
 
 export type SilentPaymentGroup = {
-  Bscan: Buffer;
-  BmValues: Array<[Buffer, number | undefined, number]>;
+  Bscan: Uint8Array;
+  BmValues: Array<[Uint8Array, number | undefined, number]>;
 };
 
-function taggedHash(tag: string, data: Buffer): Buffer {
+function taggedHash(tag: string, data: Uint8Array): Uint8Array {
   const hash = crypto.createHash("sha256");
   const tagHash = hash.update(tag, "utf-8").digest();
-  const ss = Buffer.concat([tagHash, tagHash, data]);
+  const ss = concatUint8Arrays([tagHash, tagHash, data]);
   return crypto.createHash("sha256").update(ss).digest();
 }
 
-const G = Buffer.from("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798", "hex");
+const G = hexToUint8Array("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798");
 
 export class SilentPayment {
   /**
@@ -61,11 +62,11 @@ export class SilentPayment {
         throw new Error("Unexpected version of silent payment code");
       }
       const data = bech32m.fromWords(result.words);
-      const Bscan = Buffer.from(data.slice(0, 33));
-      const Bm = Buffer.from(data.slice(33));
+      const Bscan = new Uint8Array(data.slice(0, 33));
+      const Bm = new Uint8Array(data.slice(33));
 
       // Addresses with the same Bscan key all belong to the same recipient
-      const recipient = silentPaymentGroups.find((group) => Buffer.compare(group.Bscan, Bscan) === 0);
+      const recipient = silentPaymentGroups.find((group) => compareUint8Arrays(group.Bscan, Bscan) === 0);
       if (recipient) {
         recipient.BmValues.push([Bm, target.value, i]);
       } else {
@@ -78,24 +79,24 @@ export class SilentPayment {
     if (silentPaymentGroups.length === 0) return ret; // passthrough
 
     const a = SilentPayment._sumPrivkeys(utxos);
-    const A = Buffer.from(ecc.pointFromScalar(a) as Uint8Array);
+    const A = new Uint8Array(ecc.pointFromScalar(a) as Uint8Array);
     const outpoint_hash = SilentPayment._outpointsHash(utxos, A);
 
     // Generating Pmk for each Bm in the group
     for (const group of silentPaymentGroups) {
       // Bscan * a * outpoint_hash
-      const ecdh_shared_secret_step1 = Buffer.from(ecc.privateMultiply(outpoint_hash, a) as Uint8Array);
-      const ecdh_shared_secret = Buffer.from(ecc.getSharedSecret(ecdh_shared_secret_step1, group.Bscan) as Uint8Array);
+      const ecdh_shared_secret_step1 = new Uint8Array(ecc.privateMultiply(outpoint_hash, a) as Uint8Array);
+      const ecdh_shared_secret = new Uint8Array(ecc.getSharedSecret(ecdh_shared_secret_step1, group.Bscan) as Uint8Array);
 
       let k = 0;
       for (const [Bm, amount, i] of group.BmValues) {
-        const tk = taggedHash("BIP0352/SharedSecret", Buffer.concat([ecdh_shared_secret!, SilentPayment._ser32(k)]));
+        const tk = taggedHash("BIP0352/SharedSecret", concatUint8Arrays([ecdh_shared_secret, SilentPayment._ser32(k)]));
 
         // Let Pmk = tk·G + Bm
-        const Pmk = Buffer.from(ecc.pointAdd(ecc.pointMultiply(G, tk) as Uint8Array, Bm) as Uint8Array);
+        const Pmk = new Uint8Array(ecc.pointAdd(ecc.pointMultiply(G, tk) as Uint8Array, Bm) as Uint8Array);
 
         // Encode Pmk as a BIP341 taproot output
-        const address = SilentPayment.pubkeyToAddress(Pmk.slice(1).toString("hex"));
+        const address = SilentPayment.pubkeyToAddress(uint8ArrayToHex(Pmk.slice(1)));
         const newTarget: Target = { address };
         newTarget.value = amount;
         ret[i] = newTarget;
@@ -105,43 +106,47 @@ export class SilentPayment {
     return ret;
   }
 
-  static _outpointsHash(parameters: UTXO[], A: Buffer): Buffer {
-    let bufferConcat = Buffer.alloc(0);
-    const outpoints: Array<Buffer> = [];
+  static _outpointsHash(parameters: UTXO[], A: Uint8Array): Uint8Array {
+    const outpoints: Array<Uint8Array> = [];
     for (const parameter of parameters) {
-      outpoints.push(Buffer.concat([Buffer.from(parameter.txid, "hex").reverse(), SilentPayment._ser32(parameter.vout).reverse()]));
+      const txidBuffer = hexToUint8Array(parameter.txid).reverse();
+      const voutBuffer = new Uint8Array(SilentPayment._ser32(parameter.vout).reverse());
+      outpoints.push(new Uint8Array([...txidBuffer, ...voutBuffer]));
     }
-    outpoints.sort(Buffer.compare);
+    outpoints.sort((a, b) => compareUint8Arrays(a, b));
     const smallest_outpoint = outpoints[0];
-    return taggedHash("BIP0352/Inputs", Buffer.concat([Buffer.from(smallest_outpoint), Buffer.from(A)]));
+    return taggedHash("BIP0352/Inputs", concatUint8Arrays([smallest_outpoint, A]));
   }
 
   /**
    * Serializes a 32-bit unsigned integer i as a 4-byte big-endian
    * @param i {number} The number to serialize
-   * @returns {Buffer} The serialized number
+   * @returns {Uint8Array} The serialized number
    * @private
    * */
-  static _ser32(i: number): Buffer {
-    const returnValue = Buffer.allocUnsafe(4);
-    returnValue.writeUInt32BE(i);
+  static _ser32(i: number): Uint8Array {
+    const returnValue = new Uint8Array(4);
+    returnValue[0] = (i >> 24) & 0xff;
+    returnValue[1] = (i >> 16) & 0xff;
+    returnValue[2] = (i >> 8) & 0xff;
+    returnValue[3] = i & 0xff;
     return returnValue;
   }
 
   /**
    * Sums the private keys of the UTXOs
    * @param utxos {UTXO[]}
-   * @returns {Buffer} The sum of the private keys
+   * @returns {Uint8Array} The sum of the private keys
    * @private
    **/
-  private static _sumPrivkeys(utxos: UTXO[]): Buffer {
+  private static _sumPrivkeys(utxos: UTXO[]): Uint8Array {
     if (utxos.length === 0) {
       throw new Error("No UTXOs provided");
     }
 
-    const keys: Array<Buffer> = [];
+    const keys: Array<Uint8Array> = [];
     for (const utxo of utxos) {
-      let key = ECPair.fromWIF(utxo.wif).privateKey;
+      let key = new Uint8Array(ECPair.fromWIF(utxo.wif).privateKey!);
       switch (utxo.utxoType) {
         case "non-eligible":
           // Non-eligible UTXOs can be spent in the transaction, but are not used for the
@@ -157,7 +162,7 @@ export class SilentPayment {
 
           // For taproot, check if the seckey results in an odd y-value and negate if so
           if (ecc.pointFromScalar(key)![0] === 0x03) {
-            key = Buffer.from(ecc.privateNegate(key));
+            key = new Uint8Array(ecc.privateNegate(key));
           }
         case "p2wpkh":
         case "p2sh-p2wpkh":
@@ -176,7 +181,7 @@ export class SilentPayment {
 
     // summary of every item in array
     const ret = keys.reduce((acc, key) => {
-      return Buffer.from(ecc.privateAdd(acc, key) as Uint8Array);
+      return new Uint8Array(ecc.privateAdd(acc, key) as Uint8Array);
     });
 
     return ret;
@@ -197,11 +202,11 @@ export class SilentPayment {
   }
 
   static pubkeyToAddress(hex: string): string {
-    const publicKey = Buffer.from("5120" + hex, "hex");
+    const publicKey = hexToUint8Array("5120" + hex);
     return bitcoin.address.fromOutputScript(publicKey, bitcoin.networks.bitcoin);
   }
 
   static addressToPubkey(address: string): string {
-    return bitcoin.address.toOutputScript(address).subarray(2).toString("hex");
+    return uint8ArrayToHex(bitcoin.address.toOutputScript(address).subarray(2));
   }
 }
