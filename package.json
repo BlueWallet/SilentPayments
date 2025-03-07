@@ -4,22 +4,20 @@
   "description": "SilentPayments (BIP-352) in pure typescript",
   "main": "src/index.ts",
   "scripts": {
-    "test": "jest tests/"
+    "test": "vitest run tests/"
   },
   "author": "overtorment",
   "license": "MIT",
   "dependencies": {
     "@noble/secp256k1": "1.6.3",
-    "bitcoinjs-lib": "^6.1.1",
+    "bitcoinjs-lib": "^7.0.0-rc.0",
     "ecpair": "2.0.1"
   },
   "devDependencies": {
     "@tsconfig/recommended": "^1.0.2",
     "@types/create-hash": "^1.2.2",
-    "@types/jest": "^29.5.3",
-    "jest": "^29.6.2",
     "prettier": "2.8.8",
-    "ts-jest": "^29.1.1",
-    "typescript": "^5.1.6"
+    "typescript": "^5.1.6",
+    "vitest": "^3.0.8"
   }
 }
