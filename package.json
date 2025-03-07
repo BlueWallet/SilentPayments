@@ -1,6 +1,6 @@
 {
   "name": "silent-payments",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "SilentPayments (BIP-352) in pure typescript",
   "main": "src/index.ts",
   "scripts": {
@@ -11,7 +11,8 @@
   "dependencies": {
     "@noble/secp256k1": "1.6.3",
     "bitcoinjs-lib": "^7.0.0-rc.0",
-    "ecpair": "2.0.1"
+    "create-hash": "^1.2.0",
+    "ecpair": "github:bitcoinjs/ecpair#v3.0.0"
   },
   "devDependencies": {
     "@tsconfig/recommended": "^1.0.2",
