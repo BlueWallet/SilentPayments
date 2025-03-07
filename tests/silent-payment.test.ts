@@ -3,7 +3,7 @@ import assert from "node:assert";
 import { expect, it } from 'vitest';
 import { SilentPayment, UTXOType } from "../src";
 import ecc from "../src/noble_ecc";
-import { uint8ArrayToHex } from '../src/uint8array-extras';
+import { hexToUint8Array, uint8ArrayToHex } from '../src/uint8array-extras';
 import { Vin, getUTXOType } from "../tests/utils";
 import jsonInput from "./data/sending_test_vectors.json";
 
@@ -52,7 +52,7 @@ tests.forEach((testCase, index) => {
     const utxos = sending.given.vin.map((input) => ({
       txid: input.txid,
       vout: input.vout,
-      wif: ECPair.fromPrivateKey(Buffer.from(input.private_key, "hex")).toWIF(),
+      wif: ECPair.fromPrivateKey(hexToUint8Array(input.private_key)).toWIF(),
       utxoType: getUTXOType(input) as UTXOType,
     }));
     const noEligibleUtxos = utxos.every((utxo) => utxo.utxoType === "non-eligible");
@@ -86,13 +86,13 @@ it("2 inputs - 0 SP outputs (just a passthrough)", () => {
         {
           txid: "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
           vout: 0,
-          wif: ECPair.fromPrivateKey(Buffer.from("1cd5e8f6b3f29505ed1da7a5806291ebab6491c6a172467e44debe255428a192", "hex")).toWIF(),
+          wif: ECPair.fromPrivateKey(hexToUint8Array("1cd5e8f6b3f29505ed1da7a5806291ebab6491c6a172467e44debe255428a192")).toWIF(),
           utxoType: "p2wpkh",
         },
         {
           txid: "a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d",
           vout: 0,
-          wif: ECPair.fromPrivateKey(Buffer.from("7416ef4d92e4dd09d680af6999d1723816e781c030f4b4ecb5bf46939ca30056", "hex")).toWIF(),
+          wif: ECPair.fromPrivateKey(hexToUint8Array("7416ef4d92e4dd09d680af6999d1723816e781c030f4b4ecb5bf46939ca30056")).toWIF(),
           utxoType: "p2wpkh",
         },
       ],
@@ -128,13 +128,13 @@ it("2 inputs - 1 SP output, 1 legacy, 1change (should not rearrange order of inp
         {
           txid: "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
           vout: 0,
-          wif: ECPair.fromPrivateKey(Buffer.from("1cd5e8f6b3f29505ed1da7a5806291ebab6491c6a172467e44debe255428a192", "hex")).toWIF(),
+          wif: ECPair.fromPrivateKey(hexToUint8Array("1cd5e8f6b3f29505ed1da7a5806291ebab6491c6a172467e44debe255428a192")).toWIF(),
           utxoType: "p2wpkh",
         },
         {
           txid: "a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d",
           vout: 0,
-          wif: ECPair.fromPrivateKey(Buffer.from("7416ef4d92e4dd09d680af6999d1723816e781c030f4b4ecb5bf46939ca30056", "hex")).toWIF(),
+          wif: ECPair.fromPrivateKey(hexToUint8Array("7416ef4d92e4dd09d680af6999d1723816e781c030f4b4ecb5bf46939ca30056")).toWIF(),
           utxoType: "p2wpkh",
         },
       ],
