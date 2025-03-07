@@ -146,7 +146,7 @@ export class SilentPayment {
 
     const keys: Array<Uint8Array> = [];
     for (const utxo of utxos) {
-      let key = new Uint8Array(ECPair.fromWIF(utxo.wif).privateKey!);
+      let key = ECPair.fromWIF(utxo.wif).privateKey!;
       switch (utxo.utxoType) {
         case "non-eligible":
           // Non-eligible UTXOs can be spent in the transaction, but are not used for the
