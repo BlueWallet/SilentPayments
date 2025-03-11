@@ -104,3 +104,6 @@ MIT
 - https://github.com/josibake/silent-payments-workshop/blob/main/silent-payments-workshop.ipynb
 - https://github.com/bitcoin/bitcoin/pull/27827
 - https://medium.com/@ottosch/how-bip47-works-ee641cc14bf3
+- https://medium.com/@ottosch/how-silent-payments-work-41bea907d6b0
+- https://github.com/bitcoin/bips/blob/master/bip-0352.mediawiki
+- https://github.com/bitcoin/bips/blob/97012a82064c7247df502a170c03b053825cdd15/bip-0352/reference.py

@@ -1,9 +1,10 @@
 import { ECPairFactory } from "ecpair";
 import assert from "node:assert";
-import { expect, it } from 'vitest';
-import { SilentPayment, UTXOType } from "../src";
+import { expect, it } from "vitest";
+import { Stack, Transaction, script } from "bitcoinjs-lib";
+import { getPubkeys, SilentPayment, UTXOType } from "../src";
 import ecc from "../src/noble_ecc";
-import { hexToUint8Array, uint8ArrayToHex } from '../src/uint8array-extras';
+import { compareUint8Arrays, concatUint8Arrays, hexToUint8Array, uint8ArrayToHex } from "../src/uint8array-extras";
 import { Vin, getUTXOType } from "../tests/utils";
 import jsonInput from "./data/sending_test_vectors.json";
 
@@ -240,3 +241,52 @@ it("can turn pubkey into taproot address", () => {
 it("can turn taproot address into pubkey", () => {
   assert.strictEqual(SilentPayment.addressToPubkey("bc1pgrhjjw52p6a03v635f7cnl6ttvuz9f34ujhaefm6xqtscd3m473szkl92g"), "40ef293a8a0ebaf8b351a27d89ff4b5b3822a635e4afdca77a30170c363bafa3");
 });
+
+it("can calculate tweak using getPubkeysFromTransactionInputs()", () => {
+  // for indexing, you need the sum of the (eligible) input public keys (call it A), multiplied by the input_hash, i.e,
+  // hash(A|smallest_outpoint). this is a public key (33bytes) so this 33 bytes per tx is sent to the client.
+  // that would be a tweak (per tx)
+
+  let tx = Transaction.fromHex(
+    "02000000000101d3ab6062629aad468851b4a98ca88107331311423292f5486ed96af1c03d2bff0100000000000000800250c6020000000000160014e745fe0f6421d82c3cbd036d054df86a281847541027000000000000225120e79aeee6ece0ebf0e3d806c939c906a4d0bbda9ea85f4da1c6497f9c32a3d4a902483045022100c1cd26e4ae2279c8b0317131b471d75ab0fa78796b22649338c0e1bb8d8b43cb022046e8e72e9bb5587c36b38cf354c6062d24a0bc54803fb7f64761067e4ea649b3012103a9165e1be3be592e16925159e393a43307a4557947df998e41946dcdd2f1e79500000000"
+  );
+  assert.strictEqual(uint8ArrayToHex(SilentPayment.getPubkeysFromTransactionInputs(tx)[0]), "03a9165e1be3be592e16925159e393a43307a4557947df998e41946dcdd2f1e795");
+
+  const A = sumPubKeys(SilentPayment.getPubkeysFromTransactionInputs(tx));
+
+  // looking for smallest outpoint:
+  const outpoints: Array<Uint8Array> = [];
+  for (const inn of tx.ins) {
+    const txidBuffer = inn.hash.reverse();
+    const voutBuffer = new Uint8Array(SilentPayment._ser32(inn.index).reverse());
+    outpoints.push(new Uint8Array([...txidBuffer, ...voutBuffer]));
+  }
+  outpoints.sort((a, b) => compareUint8Arrays(a, b));
+  const smallest_outpoint = outpoints[0];
+  const input_hash = SilentPayment.taggedHash("BIP0352/Inputs", concatUint8Arrays([smallest_outpoint, A]));
+
+  // finally, computing tweak:
+  const T = ecc.pointMultiply(A, input_hash);
+  // TODO: add actual test vectors and verify that tweak is always calculated correctly for different txs
+
+  ///////////////////////////////////////////////////////////////////////////////////////
+
+  tx = Transaction.fromHex(
+    "02000000000102f48fb0ce46aacab0d4aa23307c49c21603c07dba03f319e19081e6398b3e890f0000000000fdffffffdcc539465c00b20610df99da5fedc69ff8690ba7b4f055de97c4a33d3998c4b00100000000fdffffff022202000000000000225120dc5eadea373119e9900ee61e5bff6b681857ac1ed8d8b4ba032a36a3635d93a2583e0f0000000000160014923861824628261ddbe226da37935b0186bb95b10247304402207dbd0692296fd0d176bd8e60a64d6269c3abf6d36d4381434739bc6cfaef9ac0022049198fb69c45022dcf69a3adb8924a1149f562699f85e6214e5064e809d89b57012103341b7b2c152d64c879d62f3c581b02cc688b67e08406c2223a4ed12bf678414a0247304402200dd830ad23a38b96baa151db91757a605fbea6df558ad82b79e1c33ec9a0acff022056470119bd3ef6a62c7d10fe3f9985c8c8ee585da0a4e275fa52abbf94db0281012103ab0f6573cdf40b2a0582565cb5628a46af9f102d568501b20c4ac9e33927fa7500000000"
+  );
+  assert.strictEqual(uint8ArrayToHex(SilentPayment.getPubkeysFromTransactionInputs(tx)[0]), "03341b7b2c152d64c879d62f3c581b02cc688b67e08406c2223a4ed12bf678414a");
+  assert.strictEqual(uint8ArrayToHex(SilentPayment.getPubkeysFromTransactionInputs(tx)[1]), "03ab0f6573cdf40b2a0582565cb5628a46af9f102d568501b20c4ac9e33927fa75");
+});
+
+export function sumPubKeys(pubkeys: Uint8Array[], compressed: boolean = true): Uint8Array | null {
+  if (pubkeys.length === 0) return null;
+  if (pubkeys.length === 1) return pubkeys[0];
+
+  let result = pubkeys[0];
+  for (let i = 1; i < pubkeys.length; i++) {
+    const sum = ecc.pointAdd(result, pubkeys[i], compressed);
+    if (!sum) return null;
+    result = sum;
+  }
+  return result;
+}
