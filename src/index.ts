@@ -2,6 +2,7 @@ import * as crypto from "crypto";
 import { ECPairFactory } from "ecpair";
 import { bech32m } from "bech32";
 import * as bitcoin from "bitcoinjs-lib";
+import { Stack, Transaction, script } from "bitcoinjs-lib";
 import ecc from "./noble_ecc";
 import { compareUint8Arrays, concatUint8Arrays, hexToUint8Array, uint8ArrayToHex } from "./uint8array-extras";
 
@@ -26,13 +27,6 @@ export type SilentPaymentGroup = {
   Bscan: Uint8Array;
   BmValues: Array<[Uint8Array, number | undefined, number]>;
 };
-
-function taggedHash(tag: string, data: Uint8Array): Uint8Array {
-  const hash = crypto.createHash("sha256");
-  const tagHash = hash.update(tag, "utf-8").digest();
-  const ss = concatUint8Arrays([tagHash, tagHash, data]);
-  return crypto.createHash("sha256").update(ss).digest();
-}
 
 const G = hexToUint8Array("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798");
 
@@ -90,7 +84,7 @@ export class SilentPayment {
 
       let k = 0;
       for (const [Bm, amount, i] of group.BmValues) {
-        const tk = taggedHash("BIP0352/SharedSecret", concatUint8Arrays([ecdh_shared_secret, SilentPayment._ser32(k)]));
+        const tk = SilentPayment.taggedHash("BIP0352/SharedSecret", concatUint8Arrays([ecdh_shared_secret, SilentPayment._ser32(k)]));
 
         // Let Pmk = tk·G + Bm
         const Pmk = new Uint8Array(ecc.pointAdd(ecc.pointMultiply(G, tk) as Uint8Array, Bm) as Uint8Array);
@@ -106,6 +100,13 @@ export class SilentPayment {
     return ret;
   }
 
+  static taggedHash(tag: string, data: Uint8Array): Uint8Array {
+    const hash = crypto.createHash("sha256");
+    const tagHash = hash.update(tag, "utf-8").digest();
+    const ss = concatUint8Arrays([tagHash, tagHash, data]);
+    return crypto.createHash("sha256").update(ss).digest();
+  }
+
   static _outpointsHash(parameters: UTXO[], A: Uint8Array): Uint8Array {
     const outpoints: Array<Uint8Array> = [];
     for (const parameter of parameters) {
@@ -115,7 +116,7 @@ export class SilentPayment {
     }
     outpoints.sort((a, b) => compareUint8Arrays(a, b));
     const smallest_outpoint = outpoints[0];
-    return taggedHash("BIP0352/Inputs", concatUint8Arrays([smallest_outpoint, A]));
+    return SilentPayment.taggedHash("BIP0352/Inputs", concatUint8Arrays([smallest_outpoint, A]));
   }
 
   /**
@@ -208,5 +209,43 @@ export class SilentPayment {
 
   static addressToPubkey(address: string): string {
     return uint8ArrayToHex(bitcoin.address.toOutputScript(address).subarray(2));
+  }
+
+  static getPubkeysFromTransactionInputs(tx: Transaction): Uint8Array[] {
+    const result: Uint8Array[] = [];
+
+    const stackToPubkeys = (stack: Stack): Uint8Array[] => {
+      return stack
+        .filter((elem) => typeof elem !== "number") // filtering out numbers, leaving only Uint8Array
+        .filter((elem) => script.isCanonicalPubKey(elem as Uint8Array)) as Uint8Array[];
+    };
+
+    for (const input of tx.ins) {
+      const inScript = script.decompile(input.script);
+      if (inScript) {
+        // push any pubkeys in the scriptSig
+        result.push(...stackToPubkeys(inScript));
+        if (inScript.length > 1) {
+          const lastItem = inScript[inScript.length - 1];
+          if (typeof lastItem !== "number") {
+            // If the last item is a buffer, treat as redeemScript and check if we can decompile
+            // and if it has any pubkeys (it might not)
+            const redeemScript = script.decompile(lastItem);
+            if (redeemScript) {
+              result.push(...stackToPubkeys(redeemScript));
+            }
+          }
+        }
+      }
+      // Find any raw pubkeys in the witness stack
+      result.push(...input.witness.filter(script.isCanonicalPubKey));
+      for (const item of input.witness) {
+        const maybeScript = script.decompile(item);
+        if (maybeScript) {
+          result.push(...stackToPubkeys(maybeScript));
+        }
+      }
+    }
+    return result;
   }
 }
