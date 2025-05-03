@@ -5,6 +5,7 @@ import * as bitcoin from "bitcoinjs-lib";
 import { Stack, Transaction, script } from "bitcoinjs-lib";
 import ecc from "./noble_ecc";
 import { compareUint8Arrays, concatUint8Arrays, hexToUint8Array, uint8ArrayToHex } from "./uint8array-extras";
+import { sumPubKeys } from "../tests/silent-payment.test";
 
 const ECPair = ECPairFactory(ecc);
 bitcoin.initEccLib(ecc);
@@ -100,7 +101,7 @@ export class SilentPayment {
     return ret;
   }
 
-  static taggedHash(tag: string, data: Uint8Array): Uint8Array {
+  static taggedHash(tag: "BIP0352/Inputs" | "BIP0352/SharedSecret", data: Uint8Array): Uint8Array {
     const hash = crypto.createHash("sha256");
     const tagHash = hash.update(tag, "utf-8").digest();
     const ss = concatUint8Arrays([tagHash, tagHash, data]);
@@ -217,7 +218,7 @@ export class SilentPayment {
     const stackToPubkeys = (stack: Stack): Uint8Array[] => {
       return stack
         .filter((elem) => typeof elem !== "number") // filtering out numbers, leaving only Uint8Array
-        .filter((elem) => script.isCanonicalPubKey(elem as Uint8Array)) as Uint8Array[];
+        .filter((elem) => ecc.isXOnlyPoint(elem as Uint8Array)) as Uint8Array[];
     };
 
     for (const input of tx.ins) {
@@ -248,4 +249,39 @@ export class SilentPayment {
     }
     return result;
   }
+
+  static computeTweakForTx(tx: Transaction): Uint8Array {
+    // you need the sum of the (eligible) input public keys (call it A), multiplied by the input_hash, i.e,
+    // hash(A|smallest_outpoint). this is a public key (33bytes) so this 33 bytes per tx is sent to the client.
+    // that would be a tweak (per tx)
+    const A = SilentPayment.sumPubKeys(SilentPayment.getPubkeysFromTransactionInputs(tx));
+
+    // looking for smallest outpoint:
+    const outpoints: Array<Uint8Array> = [];
+    for (const inn of tx.ins) {
+      const txidBuffer = inn.hash;//.reverse();
+      const voutBuffer = new Uint8Array(SilentPayment._ser32(inn.index).reverse());
+      outpoints.push(new Uint8Array([...txidBuffer, ...voutBuffer]));
+    }
+    outpoints.sort((a, b) => compareUint8Arrays(a, b));
+    const smallest_outpoint = outpoints[0];
+    const input_hash = SilentPayment.taggedHash("BIP0352/Inputs", concatUint8Arrays([smallest_outpoint, A]));
+
+    // finally, computing tweak:
+    return ecc.pointMultiply(A, input_hash);
+  }
+
+  static sumPubKeys(pubkeys: Uint8Array[], compressed: boolean = true): Uint8Array | null {
+    if (pubkeys.length === 0) return null;
+    if (pubkeys.length === 1) return concatUint8Arrays([new Uint8Array([2]), pubkeys[0]]); // not sure about this `2`
+
+    let result = pubkeys[0];
+    for (let i = 1; i < pubkeys.length; i++) {
+      const sum = ecc.pointAdd(result, pubkeys[i], compressed);
+      if (!sum) return null;
+      result = sum;
+    }
+    return result;
+  }
+
 }
