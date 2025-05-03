@@ -242,51 +242,49 @@ it("can turn taproot address into pubkey", () => {
   assert.strictEqual(SilentPayment.addressToPubkey("bc1pgrhjjw52p6a03v635f7cnl6ttvuz9f34ujhaefm6xqtscd3m473szkl92g"), "40ef293a8a0ebaf8b351a27d89ff4b5b3822a635e4afdca77a30170c363bafa3");
 });
 
-it("can calculate tweak using getPubkeysFromTransactionInputs()", () => {
-  // for indexing, you need the sum of the (eligible) input public keys (call it A), multiplied by the input_hash, i.e,
-  // hash(A|smallest_outpoint). this is a public key (33bytes) so this 33 bytes per tx is sent to the client.
-  // that would be a tweak (per tx)
-
+it("can get pubkeys from Tx inputs", () => {
+  // txid 511e007f9c96b6d713a72b730506198f61dd96046edee72f0dc636bfe1f3a9cf
   let tx = Transaction.fromHex(
-    "02000000000101d3ab6062629aad468851b4a98ca88107331311423292f5486ed96af1c03d2bff0100000000000000800250c6020000000000160014e745fe0f6421d82c3cbd036d054df86a281847541027000000000000225120e79aeee6ece0ebf0e3d806c939c906a4d0bbda9ea85f4da1c6497f9c32a3d4a902483045022100c1cd26e4ae2279c8b0317131b471d75ab0fa78796b22649338c0e1bb8d8b43cb022046e8e72e9bb5587c36b38cf354c6062d24a0bc54803fb7f64761067e4ea649b3012103a9165e1be3be592e16925159e393a43307a4557947df998e41946dcdd2f1e79500000000"
+    "02000000000101e79e2690d05d3589257a5d1094de7f46bb1cfae3fc3fb3b644b790d4337931c5000000000001000000013226000000000000225120e92e6cb44492f87779999fbbc295540eef8a23f42efdebacac001ffa18074c100140692f4e81047496cd755c4a24b54ae36e74f7e303a265b1a9a643774d5699a6723cc66e9cdd395d2e487f7881a74bbb5740241498e70ede269583f862a3d47b4600000000"
   );
-  assert.strictEqual(uint8ArrayToHex(SilentPayment.getPubkeysFromTransactionInputs(tx)[0]), "03a9165e1be3be592e16925159e393a43307a4557947df998e41946dcdd2f1e795");
 
-  const A = sumPubKeys(SilentPayment.getPubkeysFromTransactionInputs(tx));
+  const txPrevout0 = Transaction.fromHex('020000000001018f93f113a3d5f2d3feb7444ab8c8d7de5b2b2d1d9e9a5e2e2de42ad4b622958f0000000000000000800210270000000000002251203361aedbd209998e73f60ce0ea2245fa5c4ba747489c58eaa9222df401fda898ea140f000000000016001420c262ffbfe8be9744d502f421df8e1392f3231b02483045022100efaff08cc56bbe1a2819383ff95be23a6f6ab6acaf6bb75ccb7b1e462c62f1c202206fab1385f91ba4ae4fb7731944c8ebef501c7a16eafa320975cfb7697b8537ca012102fc490ee8b804b85d1b7d4959d0bd153ca5bc12fd82134aabbe96acb21b06a1ca00000000');
 
-  // looking for smallest outpoint:
-  const outpoints: Array<Uint8Array> = [];
-  for (const inn of tx.ins) {
-    const txidBuffer = inn.hash.reverse();
-    const voutBuffer = new Uint8Array(SilentPayment._ser32(inn.index).reverse());
-    outpoints.push(new Uint8Array([...txidBuffer, ...voutBuffer]));
-  }
-  outpoints.sort((a, b) => compareUint8Arrays(a, b));
-  const smallest_outpoint = outpoints[0];
-  const input_hash = SilentPayment.taggedHash("BIP0352/Inputs", concatUint8Arrays([smallest_outpoint, A]));
+  // important, need the locking script from previous transaction, and we put it in place of unlocking
+  // script so the util that parses pubkeys can find the pubkey
+  tx.ins[0].script = txPrevout0.outs[0].script;
 
-  // finally, computing tweak:
-  const T = ecc.pointMultiply(A, input_hash);
-  // TODO: add actual test vectors and verify that tweak is always calculated correctly for different txs
+  assert.ok(SilentPayment.getPubkeysFromTransactionInputs(tx).length > 0); // element present
+  assert.strictEqual(uint8ArrayToHex(SilentPayment.getPubkeysFromTransactionInputs(tx)[0]), "3361aedbd209998e73f60ce0ea2245fa5c4ba747489c58eaa9222df401fda898");
+});
+
+it("can calculate tweak using getPubkeysFromTransactionInputs()", () => {
+  // txid 511e007f9c96b6d713a72b730506198f61dd96046edee72f0dc636bfe1f3a9cf
+  let tx = Transaction.fromHex(
+    "02000000000101e79e2690d05d3589257a5d1094de7f46bb1cfae3fc3fb3b644b790d4337931c5000000000001000000013226000000000000225120e92e6cb44492f87779999fbbc295540eef8a23f42efdebacac001ffa18074c100140692f4e81047496cd755c4a24b54ae36e74f7e303a265b1a9a643774d5699a6723cc66e9cdd395d2e487f7881a74bbb5740241498e70ede269583f862a3d47b4600000000"
+  );
+
+  const txPrevout0 = Transaction.fromHex('020000000001018f93f113a3d5f2d3feb7444ab8c8d7de5b2b2d1d9e9a5e2e2de42ad4b622958f0000000000000000800210270000000000002251203361aedbd209998e73f60ce0ea2245fa5c4ba747489c58eaa9222df401fda898ea140f000000000016001420c262ffbfe8be9744d502f421df8e1392f3231b02483045022100efaff08cc56bbe1a2819383ff95be23a6f6ab6acaf6bb75ccb7b1e462c62f1c202206fab1385f91ba4ae4fb7731944c8ebef501c7a16eafa320975cfb7697b8537ca012102fc490ee8b804b85d1b7d4959d0bd153ca5bc12fd82134aabbe96acb21b06a1ca00000000');
+
+  // important, need the locking script from previous transaction, and we put it in place of unlocking
+  // script so the util that parses pubkeys can find the pubkey
+  tx.ins[0].script = txPrevout0.outs[0].script;
+
+  assert.strictEqual(uint8ArrayToHex(SilentPayment.computeTweakForTx(tx)), '032698de13d4b56f9e5f884daa14eaa1978d599fc4cdcb092c36f15e7498172d64');
 
   ///////////////////////////////////////////////////////////////////////////////////////
 
+  // 0002593785f4bd80373f36781a02bc9bf091387b1fa12b95811333d5aaab5172
   tx = Transaction.fromHex(
     "02000000000102f48fb0ce46aacab0d4aa23307c49c21603c07dba03f319e19081e6398b3e890f0000000000fdffffffdcc539465c00b20610df99da5fedc69ff8690ba7b4f055de97c4a33d3998c4b00100000000fdffffff022202000000000000225120dc5eadea373119e9900ee61e5bff6b681857ac1ed8d8b4ba032a36a3635d93a2583e0f0000000000160014923861824628261ddbe226da37935b0186bb95b10247304402207dbd0692296fd0d176bd8e60a64d6269c3abf6d36d4381434739bc6cfaef9ac0022049198fb69c45022dcf69a3adb8924a1149f562699f85e6214e5064e809d89b57012103341b7b2c152d64c879d62f3c581b02cc688b67e08406c2223a4ed12bf678414a0247304402200dd830ad23a38b96baa151db91757a605fbea6df558ad82b79e1c33ec9a0acff022056470119bd3ef6a62c7d10fe3f9985c8c8ee585da0a4e275fa52abbf94db0281012103ab0f6573cdf40b2a0582565cb5628a46af9f102d568501b20c4ac9e33927fa7500000000"
   );
+  // console.log(JSON.stringify(tx.ins, null, 2))
   assert.strictEqual(uint8ArrayToHex(SilentPayment.getPubkeysFromTransactionInputs(tx)[0]), "03341b7b2c152d64c879d62f3c581b02cc688b67e08406c2223a4ed12bf678414a");
   assert.strictEqual(uint8ArrayToHex(SilentPayment.getPubkeysFromTransactionInputs(tx)[1]), "03ab0f6573cdf40b2a0582565cb5628a46af9f102d568501b20c4ac9e33927fa75");
+
+  const sum = SilentPayment.sumPubKeys(SilentPayment.getPubkeysFromTransactionInputs(tx));
+  assert.strictEqual(uint8ArrayToHex(sum), '0392cccfef96a8fbd21fad2bef9b5a78423f49c87a9b48d420ddc4401ba10f1ed4');
+
+  const tweak = SilentPayment.computeTweakForTx(tx);
+  assert.strictEqual(uint8ArrayToHex(tweak), '02101bd99f275e575712ad28c697488915f7087074c55a15320799f344f1e8fa5a');
 });
-
-export function sumPubKeys(pubkeys: Uint8Array[], compressed: boolean = true): Uint8Array | null {
-  if (pubkeys.length === 0) return null;
-  if (pubkeys.length === 1) return pubkeys[0];
-
-  let result = pubkeys[0];
-  for (let i = 1; i < pubkeys.length; i++) {
-    const sum = ecc.pointAdd(result, pubkeys[i], compressed);
-    if (!sum) return null;
-    result = sum;
-  }
-  return result;
-}
