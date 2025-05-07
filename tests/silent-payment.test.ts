@@ -1,8 +1,8 @@
 import { ECPairFactory } from "ecpair";
 import assert from "node:assert";
 import { expect, it } from "vitest";
-import { Stack, Transaction, script } from "bitcoinjs-lib";
-import { getPubkeys, SilentPayment, UTXOType } from "../src";
+import { Stack, Transaction, script, address, networks } from "bitcoinjs-lib";
+import { G, getPubkeys, SilentPayment, UTXOType } from "../src";
 import ecc from "../src/noble_ecc";
 import { compareUint8Arrays, concatUint8Arrays, hexToUint8Array, uint8ArrayToHex } from "../src/uint8array-extras";
 import { Vin, getUTXOType } from "../tests/utils";
@@ -258,7 +258,7 @@ it("can get pubkeys from Tx inputs", () => {
   assert.strictEqual(uint8ArrayToHex(SilentPayment.getPubkeysFromTransactionInputs(tx)[0]), "3361aedbd209998e73f60ce0ea2245fa5c4ba747489c58eaa9222df401fda898");
 });
 
-it("can calculate tweak using getPubkeysFromTransactionInputs()", () => {
+it("can calculate tweak", () => {
   // txid 511e007f9c96b6d713a72b730506198f61dd96046edee72f0dc636bfe1f3a9cf
   let tx = Transaction.fromHex(
     "02000000000101e79e2690d05d3589257a5d1094de7f46bb1cfae3fc3fb3b644b790d4337931c5000000000001000000013226000000000000225120e92e6cb44492f87779999fbbc295540eef8a23f42efdebacac001ffa18074c100140692f4e81047496cd755c4a24b54ae36e74f7e303a265b1a9a643774d5699a6723cc66e9cdd395d2e487f7881a74bbb5740241498e70ede269583f862a3d47b4600000000"
@@ -278,7 +278,7 @@ it("can calculate tweak using getPubkeysFromTransactionInputs()", () => {
   tx = Transaction.fromHex(
     "02000000000102f48fb0ce46aacab0d4aa23307c49c21603c07dba03f319e19081e6398b3e890f0000000000fdffffffdcc539465c00b20610df99da5fedc69ff8690ba7b4f055de97c4a33d3998c4b00100000000fdffffff022202000000000000225120dc5eadea373119e9900ee61e5bff6b681857ac1ed8d8b4ba032a36a3635d93a2583e0f0000000000160014923861824628261ddbe226da37935b0186bb95b10247304402207dbd0692296fd0d176bd8e60a64d6269c3abf6d36d4381434739bc6cfaef9ac0022049198fb69c45022dcf69a3adb8924a1149f562699f85e6214e5064e809d89b57012103341b7b2c152d64c879d62f3c581b02cc688b67e08406c2223a4ed12bf678414a0247304402200dd830ad23a38b96baa151db91757a605fbea6df558ad82b79e1c33ec9a0acff022056470119bd3ef6a62c7d10fe3f9985c8c8ee585da0a4e275fa52abbf94db0281012103ab0f6573cdf40b2a0582565cb5628a46af9f102d568501b20c4ac9e33927fa7500000000"
   );
-  // console.log(JSON.stringify(tx.ins, null, 2))
+
   assert.strictEqual(uint8ArrayToHex(SilentPayment.getPubkeysFromTransactionInputs(tx)[0]), "03341b7b2c152d64c879d62f3c581b02cc688b67e08406c2223a4ed12bf678414a");
   assert.strictEqual(uint8ArrayToHex(SilentPayment.getPubkeysFromTransactionInputs(tx)[1]), "03ab0f6573cdf40b2a0582565cb5628a46af9f102d568501b20c4ac9e33927fa75");
 
@@ -287,4 +287,26 @@ it("can calculate tweak using getPubkeysFromTransactionInputs()", () => {
 
   const tweak = SilentPayment.computeTweakForTx(tx);
   assert.strictEqual(uint8ArrayToHex(tweak), '02101bd99f275e575712ad28c697488915f7087074c55a15320799f344f1e8fa5a');
+});
+
+it("can create payment code out of BIP-39 seed", async () => {
+  const code = SilentPayment.seedToCode("vault hole thought beyond young winter common federal measure hobby gold better salmon fetch exhibit follow strong genius large group galaxy doll assist tip");
+  assert.strictEqual(code.address, "sp1qq2c7rt90jxqf35klz39hwkydm0ecnqtv9yrv620x7ehcd4tkra6lxq4f5j6l7ps78sru8fyhnjaqqwv4xanqr0zwg5tqe39d7y38l57f7cptdf26");
+});
+
+it("can detect incoming payment in transaction", async () => {
+  // txid 511e007f9c96b6d713a72b730506198f61dd96046edee72f0dc636bfe1f3a9cf
+  let tx = Transaction.fromHex(
+    "02000000000101e79e2690d05d3589257a5d1094de7f46bb1cfae3fc3fb3b644b790d4337931c5000000000001000000013226000000000000225120e92e6cb44492f87779999fbbc295540eef8a23f42efdebacac001ffa18074c100140692f4e81047496cd755c4a24b54ae36e74f7e303a265b1a9a643774d5699a6723cc66e9cdd395d2e487f7881a74bbb5740241498e70ede269583f862a3d47b4600000000"
+  );
+
+  const utxos = SilentPayment.detectOurUtxos(tx, "vault hole thought beyond young winter common federal measure hobby gold better salmon fetch exhibit follow strong genius large group galaxy doll assist tip", '032698de13d4b56f9e5f884daa14eaa1978d599fc4cdcb092c36f15e7498172d64');
+  assert.deepStrictEqual(utxos, [
+    {
+      txid: '511e007f9c96b6d713a72b730506198f61dd96046edee72f0dc636bfe1f3a9cf',
+      vout: 0,
+      wif: 'L4PKRVk1Peaar5WuH5LiKfkTygWtFfGrFeH2g2t3YVVqiwpJjMoF', // thats bc1payhxedzyjtu8w7ven7au9925pmhc5gl59m77ht9vqq0l5xq8fsgqtwg8vf
+      utxoType: 'p2tr'
+    }
+  ]);
 });

@@ -2,13 +2,16 @@ import * as crypto from "crypto";
 import { ECPairFactory } from "ecpair";
 import { bech32m } from "bech32";
 import * as bitcoin from "bitcoinjs-lib";
-import { Stack, Transaction, script } from "bitcoinjs-lib";
+import { Stack, Transaction, script, address, networks } from "bitcoinjs-lib";
+import { BIP32Factory } from 'bip32';
+import * as bip39 from 'bip39';
+
 import ecc from "./noble_ecc";
 import { compareUint8Arrays, concatUint8Arrays, hexToUint8Array, uint8ArrayToHex } from "./uint8array-extras";
-import { sumPubKeys } from "../tests/silent-payment.test";
 
 const ECPair = ECPairFactory(ecc);
 bitcoin.initEccLib(ecc);
+const bip32 = BIP32Factory(ecc);
 
 export type UTXOType = "p2wpkh" | "p2sh-p2wpkh" | "p2pkh" | "p2tr" | "non-eligible";
 
@@ -29,7 +32,7 @@ export type SilentPaymentGroup = {
   BmValues: Array<[Uint8Array, number | undefined, number]>;
 };
 
-const G = hexToUint8Array("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798");
+export const G = hexToUint8Array("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798");
 
 export class SilentPayment {
   /**
@@ -250,6 +253,10 @@ export class SilentPayment {
     return result;
   }
 
+  /**
+   * takes decoded bitcoin transaction and computes tweak. some transactions must be augmented with prevout data
+   * so the method can successfully discover all pubkeys from inputs (example: `tx.ins[0].script = txPrevout0.outs[0].script;`)
+   */
   static computeTweakForTx(tx: Transaction): Uint8Array {
     // you need the sum of the (eligible) input public keys (call it A), multiplied by the input_hash, i.e,
     // hash(A|smallest_outpoint). this is a public key (33bytes) so this 33 bytes per tx is sent to the client.
@@ -284,4 +291,73 @@ export class SilentPayment {
     return result;
   }
 
+
+  /**
+   * takes BIP-39 mnemonic seed and returns shareable static payment code; also: Bscan, bscan, Bspend, bspend
+   */
+  static seedToCode(bip39seed: string, accountNum = 0, passphrase = ''): { address: string; Bscan: Uint8Array; bscan: Uint8Array; Bspend: Uint8Array, bspend: Uint8Array } {
+    const root = bip32.fromSeed(bip39.mnemonicToSeedSync(bip39seed, passphrase));
+    const scanXprv = root.derivePath(`m/352'/0'/${accountNum}'/1'/0`);
+    const spendXprv = root.derivePath(`m/352'/0'/${accountNum}'/0'/0`);
+    const Bscan = scanXprv.publicKey;
+    const bscan = scanXprv.privateKey;
+    const Bspend = spendXprv.publicKey;
+    const bspend = spendXprv.privateKey;
+
+    const bech32Version = 0;
+    const words = [bech32Version].concat(bech32m.toWords(Buffer.concat([Bscan, Bspend])));
+    const address = bech32m.encode('sp', words, 1023);
+    return { address, Bscan, bscan, Bspend, bspend };
+  }
+
+  /**
+   * takes a decoded transaction (`bitcoinjs.Transaction.fromHex()` will do fine),
+   * takes computed tweak for this transaction, your mnemonic seed, and gives you UTXOs from this transaction
+   * that you own. tweak is _not_ calculated here because theoretically it can come from a tweak-indexing backend
+   * service.
+   */
+  static detectOurUtxos(tx: Transaction, seed: string, tweakHex: string) {
+    const ret: UTXO[] = [];
+    const code = SilentPayment.seedToCode(seed);
+    const sharedSecret = ecc.getSharedSecret(code.bscan, hexToUint8Array(tweakHex));
+
+    // todo: iterate k (aka label), cause it might be non-zero
+    const k = 0;
+    const t_k = SilentPayment.taggedHash("BIP0352/SharedSecret", concatUint8Arrays([sharedSecret, SilentPayment._ser32(k)]));
+
+    // Compute the expected output pubkey
+    const P_k = ecc.pointAdd(ecc.pointMultiply(G, t_k), code.Bspend);
+
+    let pubkeyHex = uint8ArrayToHex(P_k);
+    if (pubkeyHex.startsWith("02") || pubkeyHex.startsWith("03")) pubkeyHex = pubkeyHex.substring(2);
+
+    let vout = 0;
+    for (const o of tx.outs) {
+      if (uint8ArrayToHex(o.script) === "5120" + pubkeyHex) {
+        // match, that means this output is spendable by us;
+        // alternatively, could compare addresses: SilentPayment.pubkeyToAddress(pubkeyHex) === SilentPayment.pubkeyToAddress(o.script)
+
+        // deriving spending privkey for this utxo: d = b_spend + t_k (mod n)
+        const d = ecc.privateAdd(code.bspend, t_k);
+        const keyPair = ECPair.fromPrivateKey(d);
+        const wif = keyPair.toWIF();
+
+        if (!d) {
+          console.log("SilentPayment: Invalid private‐key tweak addition");
+          continue;
+        }
+
+        const u: UTXO = {
+          txid: tx.getId(),
+          vout,
+          wif,
+          utxoType: "p2tr"
+        }
+
+        ret.push(u);
+      }
+    }
+
+    return ret;
+  }
 }
