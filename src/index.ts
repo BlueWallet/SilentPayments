@@ -221,7 +221,7 @@ export class SilentPayment {
     const stackToPubkeys = (stack: Stack): Uint8Array[] => {
       return stack
         .filter((elem) => typeof elem !== "number") // filtering out numbers, leaving only Uint8Array
-        .filter((elem) => ecc.isXOnlyPoint(elem as Uint8Array)) as Uint8Array[];
+        .filter((elem) => ecc.isXOnlyPoint(elem as Uint8Array) || script.isCanonicalPubKey(elem as Uint8Array)) as Uint8Array[];
     };
 
     for (const input of tx.ins) {
