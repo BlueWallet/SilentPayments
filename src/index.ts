@@ -257,11 +257,11 @@ export class SilentPayment {
    * takes decoded bitcoin transaction and computes tweak. some transactions must be augmented with prevout data
    * so the method can successfully discover all pubkeys from inputs (example: `tx.ins[0].script = txPrevout0.outs[0].script;`)
    */
-  static computeTweakForTx(tx: Transaction): Uint8Array {
+  static computeTweakForTx(tx: Transaction): Uint8Array | null {
     // you need the sum of the (eligible) input public keys (call it A), multiplied by the input_hash, i.e,
     // hash(A|smallest_outpoint). this is a public key (33bytes) so this 33 bytes per tx is sent to the client.
     // that would be a tweak (per tx)
-    const A = SilentPayment.sumPubKeys(SilentPayment.getPubkeysFromTransactionInputs(tx));
+    let A = SilentPayment.sumPubKeys(SilentPayment.getPubkeysFromTransactionInputs(tx));
 
     // looking for smallest outpoint:
     const outpoints: Array<Uint8Array> = [];
@@ -280,7 +280,6 @@ export class SilentPayment {
 
   static sumPubKeys(pubkeys: Uint8Array[], compressed: boolean = true): Uint8Array | null {
     if (pubkeys.length === 0) return null;
-    if (pubkeys.length === 1) return concatUint8Arrays([new Uint8Array([2]), pubkeys[0]]); // not sure about this `2`
 
     let result = pubkeys[0];
     for (let i = 1; i < pubkeys.length; i++) {
@@ -288,6 +287,12 @@ export class SilentPayment {
       if (!sum) return null;
       result = sum;
     }
+
+    if (result.length === 32) {
+      // its x-only...?
+      return concatUint8Arrays([new Uint8Array([2]), result]); // not sure about this `2`
+    }
+
     return result;
   }
 

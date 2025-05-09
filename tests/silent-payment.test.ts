@@ -258,9 +258,9 @@ it("can get pubkeys from Tx inputs", () => {
   assert.strictEqual(uint8ArrayToHex(SilentPayment.getPubkeysFromTransactionInputs(tx)[0]), "3361aedbd209998e73f60ce0ea2245fa5c4ba747489c58eaa9222df401fda898");
 });
 
-it("can calculate tweak", () => {
+it("can calculate tweak 1", () => {
   // txid 511e007f9c96b6d713a72b730506198f61dd96046edee72f0dc636bfe1f3a9cf
-  let tx = Transaction.fromHex(
+  const tx = Transaction.fromHex(
     "02000000000101e79e2690d05d3589257a5d1094de7f46bb1cfae3fc3fb3b644b790d4337931c5000000000001000000013226000000000000225120e92e6cb44492f87779999fbbc295540eef8a23f42efdebacac001ffa18074c100140692f4e81047496cd755c4a24b54ae36e74f7e303a265b1a9a643774d5699a6723cc66e9cdd395d2e487f7881a74bbb5740241498e70ede269583f862a3d47b4600000000"
   );
 
@@ -270,12 +270,16 @@ it("can calculate tweak", () => {
   // script so the util that parses pubkeys can find the pubkey
   tx.ins[0].script = txPrevout0.outs[0].script;
 
+  const sum = SilentPayment.sumPubKeys(SilentPayment.getPubkeysFromTransactionInputs(tx));
+
+  assert.strictEqual(uint8ArrayToHex(sum), '023361aedbd209998e73f60ce0ea2245fa5c4ba747489c58eaa9222df401fda898');
   assert.strictEqual(uint8ArrayToHex(SilentPayment.computeTweakForTx(tx)), '032698de13d4b56f9e5f884daa14eaa1978d599fc4cdcb092c36f15e7498172d64');
+});
 
-  ///////////////////////////////////////////////////////////////////////////////////////
 
+it("can calculate tweak 2", () => {
   // 0002593785f4bd80373f36781a02bc9bf091387b1fa12b95811333d5aaab5172
-  tx = Transaction.fromHex(
+  const tx = Transaction.fromHex(
     "02000000000102f48fb0ce46aacab0d4aa23307c49c21603c07dba03f319e19081e6398b3e890f0000000000fdffffffdcc539465c00b20610df99da5fedc69ff8690ba7b4f055de97c4a33d3998c4b00100000000fdffffff022202000000000000225120dc5eadea373119e9900ee61e5bff6b681857ac1ed8d8b4ba032a36a3635d93a2583e0f0000000000160014923861824628261ddbe226da37935b0186bb95b10247304402207dbd0692296fd0d176bd8e60a64d6269c3abf6d36d4381434739bc6cfaef9ac0022049198fb69c45022dcf69a3adb8924a1149f562699f85e6214e5064e809d89b57012103341b7b2c152d64c879d62f3c581b02cc688b67e08406c2223a4ed12bf678414a0247304402200dd830ad23a38b96baa151db91757a605fbea6df558ad82b79e1c33ec9a0acff022056470119bd3ef6a62c7d10fe3f9985c8c8ee585da0a4e275fa52abbf94db0281012103ab0f6573cdf40b2a0582565cb5628a46af9f102d568501b20c4ac9e33927fa7500000000"
   );
 
@@ -287,6 +291,17 @@ it("can calculate tweak", () => {
 
   const tweak = SilentPayment.computeTweakForTx(tx);
   assert.strictEqual(uint8ArrayToHex(tweak), '02101bd99f275e575712ad28c697488915f7087074c55a15320799f344f1e8fa5a');
+});
+
+
+it("can calculate tweak 3", () => {
+  // txid c0deeef514bc1bcb959e51a414db1dc107ef299d9b140d1a6d7f4efe5f3f50f9
+  let tx = Transaction.fromHex(
+    "02000000000101e79e2690d05d3589257a5d1094de7f46bb1cfae3fc3fb3b644b790d4337931c501000000000000008002102700000000000022512040fb1745d1c5f6d3f2b8825b83f6d90e74d6f278b0fe6d17e8173751e5bcaa4ab6ec0e00000000001600143adbcced77635b09bfe108295a8e39a73d1494b402483045022100d3f7a5edf1e592aae46499073eee7f93f63b1bda22bb83557918b42148128558022036a1dde48756f6d09dbf2ae884424d20985c6d8b05b5555eafd91d4de0b2238d0121033d484bbc02f16f0c5ada1fa14d8812e09e73cc8cf01ed9be3e78bda2322b778900000000"
+  );
+
+  assert.ok(SilentPayment.computeTweakForTx(tx));
+  assert.strictEqual(uint8ArrayToHex(SilentPayment.computeTweakForTx(tx)), '03363f3e1db6a545fc3a98ce6c55d7bdc288009109442d539c09ebc7a7cb515aa1');
 });
 
 it("can create payment code out of BIP-39 seed", async () => {
@@ -309,4 +324,22 @@ it("can detect incoming payment in transaction", async () => {
       utxoType: 'p2tr'
     }
   ]);
+});
+
+it("can detect incoming payment in transaction 2", async () => {
+  // txid c0deeef514bc1bcb959e51a414db1dc107ef299d9b140d1a6d7f4efe5f3f50f9
+  let tx = Transaction.fromHex(
+    "02000000000101e79e2690d05d3589257a5d1094de7f46bb1cfae3fc3fb3b644b790d4337931c501000000000000008002102700000000000022512040fb1745d1c5f6d3f2b8825b83f6d90e74d6f278b0fe6d17e8173751e5bcaa4ab6ec0e00000000001600143adbcced77635b09bfe108295a8e39a73d1494b402483045022100d3f7a5edf1e592aae46499073eee7f93f63b1bda22bb83557918b42148128558022036a1dde48756f6d09dbf2ae884424d20985c6d8b05b5555eafd91d4de0b2238d0121033d484bbc02f16f0c5ada1fa14d8812e09e73cc8cf01ed9be3e78bda2322b778900000000"
+  );
+
+  const utxos = SilentPayment.detectOurUtxos(tx, "vault hole thought beyond young winter common federal measure hobby gold better salmon fetch exhibit follow strong genius large group galaxy doll assist tip", '03363f3e1db6a545fc3a98ce6c55d7bdc288009109442d539c09ebc7a7cb515aa1');
+  assert.deepStrictEqual(utxos, [
+      {
+        "txid": "c0deeef514bc1bcb959e51a414db1dc107ef299d9b140d1a6d7f4efe5f3f50f9",
+        "utxoType": "p2tr",
+        "vout": 0,
+        "wif": "L1qJxwybxM8ntGs5XAt4yXp37o7PWYfvGwgxnJkR329YMaRCjxv1",
+      },
+    ]
+  );
 });
