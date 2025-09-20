@@ -289,8 +289,26 @@ export class SilentPayment {
     }
 
     if (result.length === 32) {
-      // its x-only...?
-      return concatUint8Arrays([new Uint8Array([2]), result]); // not sure about this `2`
+      // We have an x-only point, need to determine correct parity
+      // Use the pointCompress function to get the proper compressed format
+      try {
+        // Create a temporary compressed point by trying both parities
+        // First try even parity (0x02)
+        const evenPoint = concatUint8Arrays([new Uint8Array([2]), result]);
+        if (ecc.isPoint(evenPoint)) {
+          return ecc.pointCompress(evenPoint, compressed);
+        }
+
+        // If even doesn't work, try odd parity (0x03)
+        const oddPoint = concatUint8Arrays([new Uint8Array([3]), result]);
+        if (ecc.isPoint(oddPoint)) {
+          return ecc.pointCompress(oddPoint, compressed);
+        }
+
+        return null;
+      } catch {
+        return null;
+      }
     }
 
     return result;
@@ -361,6 +379,7 @@ export class SilentPayment {
 
         ret.push(u);
       }
+      vout++;
     }
 
     return ret;
