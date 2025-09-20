@@ -1,6 +1,6 @@
 {
   "name": "silent-payments",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "SilentPayments (BIP-352) in pure typescript",
   "main": "src/index.ts",
   "scripts": {
