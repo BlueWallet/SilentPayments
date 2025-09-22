@@ -169,6 +169,8 @@ export class SilentPayment {
           if (ecc.pointFromScalar(key)![0] === 0x03) {
             key = new Uint8Array(ecc.privateNegate(key));
           }
+          keys.push(key);
+          break;
         case "p2wpkh":
         case "p2sh-p2wpkh":
         case "p2pkh":
@@ -266,7 +268,7 @@ export class SilentPayment {
     // looking for smallest outpoint:
     const outpoints: Array<Uint8Array> = [];
     for (const inn of tx.ins) {
-      const txidBuffer = inn.hash;//.reverse();
+      const txidBuffer = inn.hash;
       const voutBuffer = new Uint8Array(SilentPayment._ser32(inn.index).reverse());
       outpoints.push(new Uint8Array([...txidBuffer, ...voutBuffer]));
     }
@@ -362,13 +364,13 @@ export class SilentPayment {
 
         // deriving spending privkey for this utxo: d = b_spend + t_k (mod n)
         const d = ecc.privateAdd(code.bspend, t_k);
-        const keyPair = ECPair.fromPrivateKey(d);
-        const wif = keyPair.toWIF();
-
         if (!d) {
           console.log("SilentPayment: Invalid private‐key tweak addition");
           continue;
         }
+
+        const keyPair = ECPair.fromPrivateKey(d);
+        const wif = keyPair.toWIF();
 
         const u: UTXO = {
           txid: tx.getId(),
