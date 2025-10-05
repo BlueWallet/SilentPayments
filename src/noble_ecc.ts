@@ -16,11 +16,11 @@ import * as necc from "@noble/secp256k1";
 necc.utils.sha256Sync = (...messages: Uint8Array[]): Uint8Array => {
   const sha256 = createHash("sha256");
   for (const message of messages) sha256.update(message);
-  return sha256.digest();
+  return new Uint8Array(sha256.digest());
 };
 
 necc.utils.hmacSha256Sync = (key: Uint8Array, ...messages: Uint8Array[]): Uint8Array => {
-  const hash = createHmac("sha256", Buffer.from(key));
+  const hash = createHmac("sha256", key);
   messages.forEach((m) => hash.update(m));
   return Uint8Array.from(hash.digest());
 };
@@ -98,7 +98,7 @@ const ecc = {
     return necc.signSync(h, d, { der: false, extraEntropy: e });
   },
 
-  signSchnorr: (h: Uint8Array, d: Uint8Array, e: Uint8Array = Buffer.alloc(32, 0x00)): Uint8Array => {
+  signSchnorr: (h: Uint8Array, d: Uint8Array, e: Uint8Array = new Uint8Array(32).fill(0x00)): Uint8Array => {
     return necc.schnorr.signSync(h, d, e);
   },
 
