@@ -1,6 +1,7 @@
 import { UTXOType } from "../src";
 import * as crypto from 'crypto';
 import { Buffer } from 'buffer';
+import { areUint8ArraysEqual, hexToUint8Array } from "../src/uint8array-extras";
 
 // The following utilities are provided to determine the UTXOType of a transaction input.
 // This is necessary for parsing the test vectors from BIP352, but in practice a sending
@@ -68,7 +69,7 @@ class BufferReader {
     }
 }
 
-const NUMS_H = Buffer.from('50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0', 'hex');
+const NUMS_H = hexToUint8Array('50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0');
 
 export type Vin = {
   txid: string;
@@ -83,13 +84,13 @@ export type Vin = {
   private_key: string;
 };
 
-function hash160(s: Buffer): Buffer {
-    const sha256Digest = crypto.createHash('sha256').update(s).digest();
+function hash160(s: Uint8Array): Uint8Array {
+    const sha256Digest = new Uint8Array(crypto.createHash('sha256').update(s).digest());
     const ripemd160Digest = crypto.createHash('ripemd160').update(sha256Digest).digest();
-    return ripemd160Digest;
+    return new Uint8Array(ripemd160Digest);
 }
 
-function isP2tr(spk: Buffer): boolean {
+function isP2tr(spk: Uint8Array): boolean {
     if (spk.length !== 34) {
         return false;
     }
@@ -97,7 +98,7 @@ function isP2tr(spk: Buffer): boolean {
     return spk[0] === 0x51 && spk[1] === 0x20;
 }
 
-function isP2wpkh(spk: Buffer): boolean {
+function isP2wpkh(spk: Uint8Array): boolean {
     if (spk.length !== 22) {
         return false;
     }
@@ -105,7 +106,7 @@ function isP2wpkh(spk: Buffer): boolean {
     return spk[0] === 0x00 && spk[1] === 0x14;
 }
 
-function isP2sh(spk: Buffer): boolean {
+function isP2sh(spk: Uint8Array): boolean {
     if (spk.length !== 23) {
         return false;
     }
@@ -113,7 +114,7 @@ function isP2sh(spk: Buffer): boolean {
     return spk[0] === 0xA9 && spk[1] === 0x14 && spk[spk.length - 1] === 0x87;
 }
 
-function isP2pkh(spk: Buffer): boolean {
+function isP2pkh(spk: Uint8Array): boolean {
     if (spk.length !== 25) {
         return false;
     }
@@ -122,12 +123,12 @@ function isP2pkh(spk: Buffer): boolean {
 }
 
 export function getUTXOType(vin: Vin): UTXOType {
-    const spk = Buffer.from(vin.prevout.scriptPubKey.hex, "hex");
+    const spk = hexToUint8Array(vin.prevout.scriptPubKey.hex);
     if (isP2pkh(spk)) {
         // skip the first 3 op_codes and grab the 20 byte hash
         // from the scriptPubKey
         const spkHash = spk.slice(3, 3 + 20);
-        const scriptSig = Buffer.from(vin.scriptSig, "hex");
+        const scriptSig = hexToUint8Array(vin.scriptSig);
         for (let i = scriptSig.length; i > 0; i--) {
             if (i - 33 >= 0) {
                 // starting from the back, we move over the scriptSig with a 33 byte
@@ -140,14 +141,14 @@ export function getUTXOType(vin: Vin): UTXOType {
                 // note: this is an incredibly inefficient implementation, for demonstration purposes only.
                 const pubkeyBytes = scriptSig.slice(i - 33, i);
                 const pubkeyHash = hash160(pubkeyBytes);
-                if (pubkeyHash.equals(spkHash)) {
+                if (areUint8ArraysEqual(pubkeyHash,spkHash)) {
                     return 'p2pkh';
                 }
             }
         }
     }
     if (isP2sh(spk)) {
-        const redeemScript = Buffer.from(vin.scriptSig, "hex").slice(1);
+        const redeemScript = hexToUint8Array(vin.scriptSig).slice(1);
         if (isP2wpkh(redeemScript)) {
             const br = new BufferReader(Buffer.from(vin.txinwitness, "hex"));
             const witnessStack = br.readVector();

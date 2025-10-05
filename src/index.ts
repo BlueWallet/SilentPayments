@@ -106,9 +106,9 @@ export class SilentPayment {
 
   static taggedHash(tag: "BIP0352/Inputs" | "BIP0352/SharedSecret", data: Uint8Array): Uint8Array {
     const hash = crypto.createHash("sha256");
-    const tagHash = hash.update(tag, "utf-8").digest();
+    const tagHash = new Uint8Array(hash.update(tag, "utf-8").digest());
     const ss = concatUint8Arrays([tagHash, tagHash, data]);
-    return crypto.createHash("sha256").update(ss).digest();
+    return new Uint8Array(crypto.createHash("sha256").update(ss).digest());
   }
 
   static _outpointsHash(parameters: UTXO[], A: Uint8Array): Uint8Array {
@@ -321,7 +321,7 @@ export class SilentPayment {
    * takes BIP-39 mnemonic seed and returns shareable static payment code; also: Bscan, bscan, Bspend, bspend
    */
   static seedToCode(bip39seed: string, accountNum = 0, passphrase = ''): { address: string; Bscan: Uint8Array; bscan: Uint8Array; Bspend: Uint8Array, bspend: Uint8Array } {
-    const root = bip32.fromSeed(bip39.mnemonicToSeedSync(bip39seed, passphrase));
+    const root = bip32.fromSeed(new Uint8Array(bip39.mnemonicToSeedSync(bip39seed, passphrase)));
     const scanXprv = root.derivePath(`m/352'/0'/${accountNum}'/1'/0`);
     const spendXprv = root.derivePath(`m/352'/0'/${accountNum}'/0'/0`);
     const Bscan = scanXprv.publicKey;
@@ -330,7 +330,7 @@ export class SilentPayment {
     const bspend = spendXprv.privateKey;
 
     const bech32Version = 0;
-    const words = [bech32Version].concat(bech32m.toWords(Buffer.concat([Bscan, Bspend])));
+    const words = [bech32Version].concat(bech32m.toWords(concatUint8Arrays([Bscan, Bspend])));
     const address = bech32m.encode('sp', words, 1023);
     return { address, Bscan, bscan, Bspend, bspend };
   }
