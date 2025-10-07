@@ -1,7 +1,6 @@
 import { UTXOType } from "../src";
 import * as crypto from 'crypto';
-import { Buffer } from 'buffer';
-import { areUint8ArraysEqual, hexToUint8Array } from "../src/uint8array-extras";
+import { areUint8ArraysEqual, hexToUint8Array, readUInt16, readUInt32 } from "../src/uint8array-extras";
 
 // The following utilities are provided to determine the UTXOType of a transaction input.
 // This is necessary for parsing the test vectors from BIP352, but in practice a sending
@@ -15,17 +14,17 @@ import { areUint8ArraysEqual, hexToUint8Array } from "../src/uint8array-extras";
 // light client wallet is getting the 33 bytes of input public data from a full node that has
 // already done the transaction parsing and determined which inputs are eligible and which are not.
 class BufferReader {
-    private b: Buffer;
+    private b: Uint8Array;
     private offset: number;
 
-    constructor(b: Buffer) {
+    constructor(b: Uint8Array) {
         this.b = b;
         this.offset = 0;
     }
 
     readUInt64LE() {
-      const a = this.b.readUInt32LE(this.offset);
-      let b = this.b.readUInt32LE(this.offset + 4);
+      const a = readUInt32(this.b, this.offset, true);
+      let b = readUInt32(this.b, this.offset + 4, true);
       b *= 0x100000000;
       return b + a;
     }
@@ -35,13 +34,13 @@ class BufferReader {
             return 0; // end of stream
         }
         let nit: number;
-        const firstByte = this.b.readUInt8(this.offset);
+        const firstByte = this.b[this.offset];
         this.offset += 1;
         if (firstByte === 0xfd) {
-            nit = this.b.readUInt16LE(this.offset);
+            nit = readUInt16(this.b, this.offset, true);
             this.offset += 2;
         } else if (firstByte === 0xfe) {
-            nit = this.b.readUInt32LE(this.offset);
+            nit = readUInt32(this.b, this.offset, true);
             this.offset += 4;
         } else if (firstByte === 0xff) {
             nit = this.readUInt64LE();
@@ -52,14 +51,14 @@ class BufferReader {
         return nit;
     }
 
-    readElement(): Buffer {
+    readElement(): Uint8Array {
         const nit = this.readCompactSize();
         return this.b.slice(this.offset, this.offset + nit);
     }
 
-    public readVector(): Buffer[] {
+    public readVector(): Uint8Array[] {
         const nit = this.readCompactSize();
-        const r: Buffer[] = [];
+        const r: Uint8Array[] = [];
         for (let i = 0; i < nit; i++) {
             const t = this.readElement();
             r.push(t);
@@ -150,7 +149,7 @@ export function getUTXOType(vin: Vin): UTXOType {
     if (isP2sh(spk)) {
         const redeemScript = hexToUint8Array(vin.scriptSig).slice(1);
         if (isP2wpkh(redeemScript)) {
-            const br = new BufferReader(Buffer.from(vin.txinwitness, "hex"));
+            const br = new BufferReader(hexToUint8Array(vin.txinwitness));
             const witnessStack = br.readVector();
             if (witnessStack[1].length === 33) {
                 return 'p2wpkh';
@@ -158,14 +157,14 @@ export function getUTXOType(vin: Vin): UTXOType {
         }
     }
     if (isP2wpkh(spk)) {
-        const br = new BufferReader(Buffer.from(vin.txinwitness, "hex"));
+        const br = new BufferReader(hexToUint8Array(vin.txinwitness));
         const witnessStack = br.readVector();
         if (witnessStack[1].length === 33) {
             return 'p2wpkh';
         }
     }
     if (isP2tr(spk)) {
-        const br = new BufferReader(Buffer.from(vin.txinwitness, "hex"));
+        const br = new BufferReader(hexToUint8Array(vin.txinwitness));
         const witnessStack = br.readVector();
         if (witnessStack.length >= 1) {
             if (witnessStack.length > 1 && witnessStack[witnessStack.length - 1][0] === 0x50) {
@@ -177,7 +176,7 @@ export function getUTXOType(vin: Vin): UTXOType {
                 const controlBlock = witnessStack[witnessStack.length - 1];
                 //  control block is <control byte> <32 byte internal key> and 0 or more <32 byte hash>
                 const internalKey = controlBlock.slice(1, 33);
-                if (internalKey.equals(NUMS_H)) {
+                if (areUint8ArraysEqual(internalKey,NUMS_H)) {
                     // Skip if NUMS_H
                     return 'non-eligible';
                 }

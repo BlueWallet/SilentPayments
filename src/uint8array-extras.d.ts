@@ -299,3 +299,7 @@ console.log(includes(byteArray, new Uint8Array([0x78, 0x90])));
 ```
 */
 export function includes(array: Uint8Array, value: Uint8Array): boolean;
+
+export function readUInt32(bytes: Uint8Array, offset: number, littleEndian: boolean): number;
+
+export function readUInt16(bytes: Uint8Array, offset: number, littleEndian: boolean): number;
