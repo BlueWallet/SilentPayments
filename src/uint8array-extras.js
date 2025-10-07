@@ -337,11 +337,11 @@ export function includes(array, value) {
 
 export function readUInt32(bytes, offset, littleEndian) {
   if (!(bytes instanceof Uint8Array)) {
-    throw new TypeError("Expected a Uint8Array");
+    throw new TypeError(`Expected bytes to be Uint8Array, got ${typeof value}`);
   }
 
   if (offset < 0 || offset + 4 > bytes.length) {
-    throw new RangeError("Offset is outside the bounds of Uint8Array");
+    throw new RangeError(`Offset (${offset}) is out of bounds.`);
   }
 
   if (littleEndian) {
@@ -373,10 +373,10 @@ export function readUInt32(bytes, offset, littleEndian) {
 
 export function readUInt16(bytes, offset, littleEndian) {
   if (!(bytes instanceof Uint8Array)) {
-    throw new TypeError("Expected a Uint8Array");
+    throw new TypeError(`Expected bytes to be Uint8Array, got ${typeof value}`);
   }
   if (offset < 0 || offset + 2 > bytes.length) {
-    throw new RangeError("Offset is outside the bounds of Uint8Array");
+    throw new RangeError(`Offset (${offset}) is out of bounds`);
   }
   if (littleEndian) {
     return (bytes[offset] | (bytes[offset + 1] << 8)) >>> 0;
