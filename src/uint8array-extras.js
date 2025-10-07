@@ -324,3 +324,63 @@ export function indexOf(array, value) {
 export function includes(array, value) {
   return indexOf(array, value) !== -1;
 }
+
+/**
+ * @param bytes - The `Uint8Array` to read the 4 bytes from.
+ * @param offset - The position in the array where reading should begin.
+ * @param littleEndian - If true, interprets the bytes as little-endian; otherwise, big-endian.
+ * @returns {number} The 32-bit unsigned integer value.
+ * @throws {TypeError} If `bytes` is not a Uint8Array.
+ * @throws {RangeError} If the offset is outside the bounds of the `Uint8Array`.
+ *
+ */
+
+export function readUInt32(bytes, offset, littleEndian) {
+  if (!(bytes instanceof Uint8Array)) {
+    throw new TypeError("Expected a Uint8Array");
+  }
+
+  if (offset < 0 || offset + 4 > bytes.length) {
+    throw new RangeError("Offset is outside the bounds of Uint8Array");
+  }
+
+  if (littleEndian) {
+    let num = 0;
+    num = ((num << 8) + bytes[offset + 3]) >>> 0;
+    num = ((num << 8) + bytes[offset + 2]) >>> 0;
+    num = ((num << 8) + bytes[offset + 1]) >>> 0;
+    num = ((num << 8) + bytes[offset]) >>> 0;
+    return num;
+  } else {
+    let num = 0;
+    num = ((num << 8) + bytes[offset]) >>> 0;
+    num = ((num << 8) + bytes[offset + 1]) >>> 0;
+    num = ((num << 8) + bytes[offset + 2]) >>> 0;
+    num = ((num << 8) + bytes[offset + 3]) >>> 0;
+    return num;
+  }
+}
+
+/**
+ * @param bytes - The `Uint8Array` to read the 2 bytes from.
+ * @param offset - The position in the array where reading should begin.
+ * @param littleEndian - If true, interprets the bytes as little-endian; otherwise, big-endian.
+ * @returns {number} The 16-bit unsigned integer value.
+ * @throws {TypeError} If `bytes` is not a Uint8Array.
+ * @throws {RangeError} If the offset is outside the bounds of the `Uint8Array`.
+ *
+ */
+
+export function readUInt16(bytes, offset, littleEndian) {
+  if (!(bytes instanceof Uint8Array)) {
+    throw new TypeError("Expected a Uint8Array");
+  }
+  if (offset < 0 || offset + 2 > bytes.length) {
+    throw new RangeError("Offset is outside the bounds of Uint8Array");
+  }
+  if (littleEndian) {
+    return (bytes[offset] | (bytes[offset + 1] << 8)) >>> 0;
+  } else {
+    return (bytes[offset + 1] | (bytes[offset] << 8)) >>> 0;
+  }
+}
