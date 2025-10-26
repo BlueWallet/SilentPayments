@@ -13,10 +13,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: "npm"
 
       - name: Install node_modules
-        run: npm ci
+        run: npm i
 
       - name: Run tests
         run: npm test
