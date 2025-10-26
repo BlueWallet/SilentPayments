@@ -276,6 +276,15 @@ it("can calculate tweak 1", () => {
   assert.strictEqual(uint8ArrayToHex(SilentPayment.computeTweakForTx(tx)), '032698de13d4b56f9e5f884daa14eaa1978d599fc4cdcb092c36f15e7498172d64');
 });
 
+it("can not calculate tweak 1 when there is no script from prevout", () => {
+  // txid 511e007f9c96b6d713a72b730506198f61dd96046edee72f0dc636bfe1f3a9cf
+  const tx = Transaction.fromHex(
+    "02000000000101e79e2690d05d3589257a5d1094de7f46bb1cfae3fc3fb3b644b790d4337931c5000000000001000000013226000000000000225120e92e6cb44492f87779999fbbc295540eef8a23f42efdebacac001ffa18074c100140692f4e81047496cd755c4a24b54ae36e74f7e303a265b1a9a643774d5699a6723cc66e9cdd395d2e487f7881a74bbb5740241498e70ede269583f862a3d47b4600000000"
+  );
+
+  assert.throws(() => SilentPayment.computeTweakForTx(tx), /No pubkeys found/);
+});
+
 
 it("can calculate tweak 2", () => {
   // 0002593785f4bd80373f36781a02bc9bf091387b1fa12b95811333d5aaab5172
@@ -307,7 +316,10 @@ it("can calculate tweak 3", () => {
 it("can create payment code out of BIP-39 seed", async () => {
   const code = SilentPayment.seedToCode("vault hole thought beyond young winter common federal measure hobby gold better salmon fetch exhibit follow strong genius large group galaxy doll assist tip");
   assert.strictEqual(code.address, "sp1qq2c7rt90jxqf35klz39hwkydm0ecnqtv9yrv620x7ehcd4tkra6lxq4f5j6l7ps78sru8fyhnjaqqwv4xanqr0zwg5tqe39d7y38l57f7cptdf26");
-});
+
+  assert.strictEqual(uint8ArrayToHex(code.bscan), "8ec7ee5936f993b57dcc4e182eea413136e2a897b76328ae3ca19eca7804b45d");
+  assert.strictEqual(uint8ArrayToHex(code.Bspend), "02a9a4b5ff061e3c07c3a4979cba003995376601bc4e45160cc4adf1227fd3c9f6");
+}); 
 
 it("can detect incoming payment in transaction", async () => {
   // txid 511e007f9c96b6d713a72b730506198f61dd96046edee72f0dc636bfe1f3a9cf

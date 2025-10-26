@@ -265,6 +265,10 @@ export class SilentPayment {
     // that would be a tweak (per tx)
     let A = SilentPayment.sumPubKeys(SilentPayment.getPubkeysFromTransactionInputs(tx));
 
+    if (A === null) {
+      throw new Error("No pubkeys found in transaction inputs");
+    }
+
     // looking for smallest outpoint:
     const outpoints: Array<Uint8Array> = [];
     for (const inn of tx.ins) {
