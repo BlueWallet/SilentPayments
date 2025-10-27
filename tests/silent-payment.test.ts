@@ -321,7 +321,7 @@ it("can create payment code out of BIP-39 seed", async () => {
   assert.strictEqual(uint8ArrayToHex(code.Bspend), "02a9a4b5ff061e3c07c3a4979cba003995376601bc4e45160cc4adf1227fd3c9f6");
 }); 
 
-it("can detect incoming payment in transaction", async () => {
+it("can detect incoming payment in transaction using seed", async () => {
   // txid 511e007f9c96b6d713a72b730506198f61dd96046edee72f0dc636bfe1f3a9cf
   let tx = Transaction.fromHex(
     "02000000000101e79e2690d05d3589257a5d1094de7f46bb1cfae3fc3fb3b644b790d4337931c5000000000001000000013226000000000000225120e92e6cb44492f87779999fbbc295540eef8a23f42efdebacac001ffa18074c100140692f4e81047496cd755c4a24b54ae36e74f7e303a265b1a9a643774d5699a6723cc66e9cdd395d2e487f7881a74bbb5740241498e70ede269583f862a3d47b4600000000"
@@ -338,7 +338,27 @@ it("can detect incoming payment in transaction", async () => {
   ]);
 });
 
-it("can detect incoming payment in transaction 2", async () => {
+it("can detect incoming payment in transaction using tweak", async () => {
+  // txid 511e007f9c96b6d713a72b730506198f61dd96046edee72f0dc636bfe1f3a9cf
+  let tx = Transaction.fromHex(
+    "02000000000101e79e2690d05d3589257a5d1094de7f46bb1cfae3fc3fb3b644b790d4337931c5000000000001000000013226000000000000225120e92e6cb44492f87779999fbbc295540eef8a23f42efdebacac001ffa18074c100140692f4e81047496cd755c4a24b54ae36e74f7e303a265b1a9a643774d5699a6723cc66e9cdd395d2e487f7881a74bbb5740241498e70ede269583f862a3d47b4600000000"
+  );
+
+  const tweak = '032698de13d4b56f9e5f884daa14eaa1978d599fc4cdcb092c36f15e7498172d64';
+  const bscan = "8ec7ee5936f993b57dcc4e182eea413136e2a897b76328ae3ca19eca7804b45d";
+  const Bspend = "02a9a4b5ff061e3c07c3a4979cba003995376601bc4e45160cc4adf1227fd3c9f6";
+
+  const utxos = SilentPayment.detectOurUtxosUsingTweakbscanBspend(tx, tweak, bscan, Bspend);
+  assert.deepStrictEqual(utxos, [
+    {
+      txid: '511e007f9c96b6d713a72b730506198f61dd96046edee72f0dc636bfe1f3a9cf',
+      vout: 0,
+      utxoType: 'p2tr'
+    }
+  ]);
+});
+
+it("can detect incoming payment in transaction using seed 2", async () => {
   // txid c0deeef514bc1bcb959e51a414db1dc107ef299d9b140d1a6d7f4efe5f3f50f9
   let tx = Transaction.fromHex(
     "02000000000101e79e2690d05d3589257a5d1094de7f46bb1cfae3fc3fb3b644b790d4337931c501000000000000008002102700000000000022512040fb1745d1c5f6d3f2b8825b83f6d90e74d6f278b0fe6d17e8173751e5bcaa4ab6ec0e00000000001600143adbcced77635b09bfe108295a8e39a73d1494b402483045022100d3f7a5edf1e592aae46499073eee7f93f63b1bda22bb83557918b42148128558022036a1dde48756f6d09dbf2ae884424d20985c6d8b05b5555eafd91d4de0b2238d0121033d484bbc02f16f0c5ada1fa14d8812e09e73cc8cf01ed9be3e78bda2322b778900000000"
@@ -354,4 +374,24 @@ it("can detect incoming payment in transaction 2", async () => {
       },
     ]
   );
+});
+
+it("can detect incoming payment in transaction using tweak 2", async () => {
+  // txid c0deeef514bc1bcb959e51a414db1dc107ef299d9b140d1a6d7f4efe5f3f50f9
+  let tx = Transaction.fromHex(
+    "02000000000101e79e2690d05d3589257a5d1094de7f46bb1cfae3fc3fb3b644b790d4337931c501000000000000008002102700000000000022512040fb1745d1c5f6d3f2b8825b83f6d90e74d6f278b0fe6d17e8173751e5bcaa4ab6ec0e00000000001600143adbcced77635b09bfe108295a8e39a73d1494b402483045022100d3f7a5edf1e592aae46499073eee7f93f63b1bda22bb83557918b42148128558022036a1dde48756f6d09dbf2ae884424d20985c6d8b05b5555eafd91d4de0b2238d0121033d484bbc02f16f0c5ada1fa14d8812e09e73cc8cf01ed9be3e78bda2322b778900000000"
+  );
+
+  const tweak = '03363f3e1db6a545fc3a98ce6c55d7bdc288009109442d539c09ebc7a7cb515aa1';
+  const bscan = "8ec7ee5936f993b57dcc4e182eea413136e2a897b76328ae3ca19eca7804b45d";
+  const Bspend = "02a9a4b5ff061e3c07c3a4979cba003995376601bc4e45160cc4adf1227fd3c9f6";
+
+  const utxos = SilentPayment.detectOurUtxosUsingTweakbscanBspend(tx, tweak, bscan, Bspend);
+  assert.deepStrictEqual(utxos, [
+    {
+      "txid": "c0deeef514bc1bcb959e51a414db1dc107ef299d9b140d1a6d7f4efe5f3f50f9",
+      "utxoType": "p2tr",
+      "vout": 0
+    }
+  ]);
 });
