@@ -391,7 +391,7 @@ export class SilentPayment {
     return ret;
   }
 
-  static detectOurUtxosUsingTweak(tx: Transaction, tweakHex: string, bscan: string, Bspend: string) {
+  static detectOurUtxosUsingTweakbscanBspend(tx: Transaction, tweakHex: string, bscan: string, Bspend: string) {
     const ret: Omit<UTXO, 'wif'>[] = [];
     const sharedSecret = ecc.getSharedSecret(hexToUint8Array(bscan), hexToUint8Array(tweakHex));
 

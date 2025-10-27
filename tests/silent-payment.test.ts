@@ -348,7 +348,7 @@ it("can detect incoming payment in transaction using tweak", async () => {
   const bscan = "8ec7ee5936f993b57dcc4e182eea413136e2a897b76328ae3ca19eca7804b45d";
   const Bspend = "02a9a4b5ff061e3c07c3a4979cba003995376601bc4e45160cc4adf1227fd3c9f6";
 
-  const utxos = SilentPayment.detectOurUtxosUsingTweak(tx, tweak, bscan, Bspend);
+  const utxos = SilentPayment.detectOurUtxosUsingTweakbscanBspend(tx, tweak, bscan, Bspend);
   assert.deepStrictEqual(utxos, [
     {
       txid: '511e007f9c96b6d713a72b730506198f61dd96046edee72f0dc636bfe1f3a9cf',
@@ -386,7 +386,7 @@ it("can detect incoming payment in transaction using tweak 2", async () => {
   const bscan = "8ec7ee5936f993b57dcc4e182eea413136e2a897b76328ae3ca19eca7804b45d";
   const Bspend = "02a9a4b5ff061e3c07c3a4979cba003995376601bc4e45160cc4adf1227fd3c9f6";
 
-  const utxos = SilentPayment.detectOurUtxosUsingTweak(tx, tweak, bscan, Bspend);
+  const utxos = SilentPayment.detectOurUtxosUsingTweakbscanBspend(tx, tweak, bscan, Bspend);
   assert.deepStrictEqual(utxos, [
     {
       "txid": "c0deeef514bc1bcb959e51a414db1dc107ef299d9b140d1a6d7f4efe5f3f50f9",
