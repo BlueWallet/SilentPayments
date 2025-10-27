@@ -18,7 +18,7 @@ export type UTXOType = "p2wpkh" | "p2sh-p2wpkh" | "p2pkh" | "p2tr" | "non-eligib
 export type UTXO = {
   txid: string;
   vout: number;
-  wif: string;
+  wif?: string;
   utxoType: UTXOType;
 };
 
@@ -380,6 +380,41 @@ export class SilentPayment {
           txid: tx.getId(),
           vout,
           wif,
+          utxoType: "p2tr"
+        }
+
+        ret.push(u);
+      }
+      vout++;
+    }
+
+    return ret;
+  }
+
+  static detectOurUtxosUsingTweak(tx: Transaction, tweakHex: string, bscan: string, Bspend: string) {
+    const ret: UTXO[] = [];
+    const sharedSecret = ecc.getSharedSecret(hexToUint8Array(bscan), hexToUint8Array(tweakHex));
+
+    // todo: iterate k (aka label), cause it might be non-zero
+    const k = 0;
+    const t_k = SilentPayment.taggedHash("BIP0352/SharedSecret", concatUint8Arrays([sharedSecret, SilentPayment._ser32(k)]));
+
+    // Compute the expected output pubkey
+    const P_k = ecc.pointAdd(ecc.pointMultiply(G, t_k), hexToUint8Array(Bspend));
+
+    let pubkeyHex = uint8ArrayToHex(P_k);
+    if (pubkeyHex.startsWith("02") || pubkeyHex.startsWith("03")) pubkeyHex = pubkeyHex.substring(2);
+
+    let vout = 0;
+    for (const o of tx.outs) {
+      if (uint8ArrayToHex(o.script) === "5120" + pubkeyHex) {
+        // match, that means this output is spendable by us;
+        // alternatively, could compare addresses: SilentPayment.pubkeyToAddress(pubkeyHex) === SilentPayment.pubkeyToAddress(o.script)
+
+        // deriving spending privkey for this utxo: d = b_spend + t_k (mod n)
+        const u: UTXO = {
+          txid: tx.getId(),
+          vout,
           utxoType: "p2tr"
         }
 
