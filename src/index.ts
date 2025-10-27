@@ -18,7 +18,7 @@ export type UTXOType = "p2wpkh" | "p2sh-p2wpkh" | "p2pkh" | "p2tr" | "non-eligib
 export type UTXO = {
   txid: string;
   vout: number;
-  wif?: string;
+  wif: string;
   utxoType: UTXOType;
 };
 
@@ -392,7 +392,7 @@ export class SilentPayment {
   }
 
   static detectOurUtxosUsingTweak(tx: Transaction, tweakHex: string, bscan: string, Bspend: string) {
-    const ret: UTXO[] = [];
+    const ret: Omit<UTXO, 'wif'>[] = [];
     const sharedSecret = ecc.getSharedSecret(hexToUint8Array(bscan), hexToUint8Array(tweakHex));
 
     // todo: iterate k (aka label), cause it might be non-zero
