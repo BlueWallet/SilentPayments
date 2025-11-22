@@ -333,6 +333,9 @@ export class SilentPayment {
     const Bspend = spendXprv.publicKey;
     const bspend = spendXprv.privateKey;
 
+    assert(bscan, 'could not derive bscan from seed');
+    assert(bspend, 'could not derive bspend from seed');
+
     const bech32Version = 0;
     const words = [bech32Version].concat(bech32m.toWords(concatUint8Arrays([Bscan, Bspend])));
     const address = bech32m.encode('sp', words, 1023);
@@ -355,7 +358,10 @@ export class SilentPayment {
     const t_k = SilentPayment.taggedHash("BIP0352/SharedSecret", concatUint8Arrays([sharedSecret, SilentPayment._ser32(k)]));
 
     // Compute the expected output pubkey
-    const P_k = ecc.pointAdd(ecc.pointMultiply(G, t_k), code.Bspend);
+    const tkG = ecc.pointMultiply(G, t_k);
+    assert(tkG, 'Failed to compute tkG');
+    const P_k = ecc.pointAdd(tkG, code.Bspend);
+    assert(P_k, 'Failed to compute output pubkey');
 
     let pubkeyHex = uint8ArrayToHex(P_k);
     if (pubkeyHex.startsWith("02") || pubkeyHex.startsWith("03")) pubkeyHex = pubkeyHex.substring(2);
@@ -400,7 +406,10 @@ export class SilentPayment {
     const t_k = SilentPayment.taggedHash("BIP0352/SharedSecret", concatUint8Arrays([sharedSecret, SilentPayment._ser32(k)]));
 
     // Compute the expected output pubkey
-    const P_k = ecc.pointAdd(ecc.pointMultiply(G, t_k), hexToUint8Array(Bspend));
+    const tkG = ecc.pointMultiply(G, t_k);
+    assert(tkG, 'Failed to compute tkG');
+    const P_k = ecc.pointAdd(tkG, hexToUint8Array(Bspend));
+    assert(P_k, 'Failed to compute output pubkey');
 
     let pubkeyHex = uint8ArrayToHex(P_k);
     if (pubkeyHex.startsWith("02") || pubkeyHex.startsWith("03")) pubkeyHex = pubkeyHex.substring(2);
@@ -412,7 +421,7 @@ export class SilentPayment {
         // alternatively, could compare addresses: SilentPayment.pubkeyToAddress(pubkeyHex) === SilentPayment.pubkeyToAddress(o.script)
 
         // deriving spending privkey for this utxo: d = b_spend + t_k (mod n)
-        const u: UTXO = {
+        const u: Omit<UTXO, 'wif'> = {
           txid: tx.getId(),
           vout,
           utxoType: "p2tr"
@@ -425,4 +434,9 @@ export class SilentPayment {
 
     return ret;
   }
+}
+
+
+function assert(condition: any, message: string): asserts condition {
+  if (!condition) throw new Error(message);
 }

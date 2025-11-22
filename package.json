@@ -1,9 +1,10 @@
 {
   "name": "silent-payments",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "SilentPayments (BIP-352) in pure typescript",
   "main": "src/index.ts",
   "scripts": {
+    "tslint": "tsc src/index.ts --noEmit --skipLibCheck --target esnext --moduleResolution nodenext --module NodeNext ",
     "test": "vitest run tests/"
   },
   "author": "overtorment",
