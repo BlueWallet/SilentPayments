@@ -1,5 +1,6 @@
 import { UTXOType } from "../src";
-import * as crypto from 'crypto';
+import { sha256 } from "@noble/hashes/sha2";
+import { ripemd160 } from "@noble/hashes/ripemd160";
 import { areUint8ArraysEqual, hexToUint8Array, readUInt16, readUInt32 } from "../src/uint8array-extras";
 
 // The following utilities are provided to determine the UTXOType of a transaction input.
@@ -84,9 +85,7 @@ export type Vin = {
 };
 
 function hash160(s: Uint8Array): Uint8Array {
-    const sha256Digest = new Uint8Array(crypto.createHash('sha256').update(s).digest());
-    const ripemd160Digest = crypto.createHash('ripemd160').update(sha256Digest).digest();
-    return new Uint8Array(ripemd160Digest);
+    return ripemd160(sha256(s));
 }
 
 function isP2tr(spk: Uint8Array): boolean {

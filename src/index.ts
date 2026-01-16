@@ -1,10 +1,10 @@
-import * as crypto from "crypto";
-import { ECPairFactory } from "ecpair";
+import { sha256 } from "@noble/hashes/sha2";
 import { bech32m } from "bech32";
+import { BIP32Factory } from "bip32";
+import * as bip39 from "bip39";
 import * as bitcoin from "bitcoinjs-lib";
-import { Stack, Transaction, script, address, networks } from "bitcoinjs-lib";
-import { BIP32Factory } from 'bip32';
-import * as bip39 from 'bip39';
+import { Stack, Transaction, script } from "bitcoinjs-lib";
+import { ECPairFactory } from "ecpair";
 
 import ecc from "./noble_ecc";
 import { compareUint8Arrays, concatUint8Arrays, hexToUint8Array, uint8ArrayToHex } from "./uint8array-extras";
@@ -105,10 +105,9 @@ export class SilentPayment {
   }
 
   static taggedHash(tag: "BIP0352/Inputs" | "BIP0352/SharedSecret", data: Uint8Array): Uint8Array {
-    const hash = crypto.createHash("sha256");
-    const tagHash = new Uint8Array(hash.update(tag, "utf-8").digest());
+    const tagHash = sha256(new TextEncoder().encode(tag));
     const ss = concatUint8Arrays([tagHash, tagHash, data]);
-    return new Uint8Array(crypto.createHash("sha256").update(ss).digest());
+    return sha256(ss);
   }
 
   static _outpointsHash(parameters: UTXO[], A: Uint8Array): Uint8Array {
@@ -320,11 +319,10 @@ export class SilentPayment {
     return result;
   }
 
-
   /**
    * takes BIP-39 mnemonic seed and returns shareable static payment code; also: Bscan, bscan, Bspend, bspend
    */
-  static seedToCode(bip39seed: string, accountNum = 0, passphrase = ''): { address: string; Bscan: Uint8Array; bscan: Uint8Array; Bspend: Uint8Array, bspend: Uint8Array } {
+  static seedToCode(bip39seed: string, accountNum = 0, passphrase = ""): { address: string; Bscan: Uint8Array; bscan: Uint8Array; Bspend: Uint8Array; bspend: Uint8Array } {
     const root = bip32.fromSeed(new Uint8Array(bip39.mnemonicToSeedSync(bip39seed, passphrase)));
     const scanXprv = root.derivePath(`m/352'/0'/${accountNum}'/1'/0`);
     const spendXprv = root.derivePath(`m/352'/0'/${accountNum}'/0'/0`);
@@ -333,12 +331,12 @@ export class SilentPayment {
     const Bspend = spendXprv.publicKey;
     const bspend = spendXprv.privateKey;
 
-    assert(bscan, 'could not derive bscan from seed');
-    assert(bspend, 'could not derive bspend from seed');
+    assert(bscan, "could not derive bscan from seed");
+    assert(bspend, "could not derive bspend from seed");
 
     const bech32Version = 0;
     const words = [bech32Version].concat(bech32m.toWords(concatUint8Arrays([Bscan, Bspend])));
-    const address = bech32m.encode('sp', words, 1023);
+    const address = bech32m.encode("sp", words, 1023);
     return { address, Bscan, bscan, Bspend, bspend };
   }
 
@@ -359,9 +357,9 @@ export class SilentPayment {
 
     // Compute the expected output pubkey
     const tkG = ecc.pointMultiply(G, t_k);
-    assert(tkG, 'Failed to compute tkG');
+    assert(tkG, "Failed to compute tkG");
     const P_k = ecc.pointAdd(tkG, code.Bspend);
-    assert(P_k, 'Failed to compute output pubkey');
+    assert(P_k, "Failed to compute output pubkey");
 
     let pubkeyHex = uint8ArrayToHex(P_k);
     if (pubkeyHex.startsWith("02") || pubkeyHex.startsWith("03")) pubkeyHex = pubkeyHex.substring(2);
@@ -386,8 +384,8 @@ export class SilentPayment {
           txid: tx.getId(),
           vout,
           wif,
-          utxoType: "p2tr"
-        }
+          utxoType: "p2tr",
+        };
 
         ret.push(u);
       }
@@ -398,7 +396,7 @@ export class SilentPayment {
   }
 
   static detectOurUtxosUsingTweakbscanBspend(tx: Transaction, tweakHex: string, bscan: string, Bspend: string) {
-    const ret: Omit<UTXO, 'wif'>[] = [];
+    const ret: Omit<UTXO, "wif">[] = [];
     const sharedSecret = ecc.getSharedSecret(hexToUint8Array(bscan), hexToUint8Array(tweakHex));
 
     // todo: iterate k (aka label), cause it might be non-zero
@@ -407,9 +405,9 @@ export class SilentPayment {
 
     // Compute the expected output pubkey
     const tkG = ecc.pointMultiply(G, t_k);
-    assert(tkG, 'Failed to compute tkG');
+    assert(tkG, "Failed to compute tkG");
     const P_k = ecc.pointAdd(tkG, hexToUint8Array(Bspend));
-    assert(P_k, 'Failed to compute output pubkey');
+    assert(P_k, "Failed to compute output pubkey");
 
     let pubkeyHex = uint8ArrayToHex(P_k);
     if (pubkeyHex.startsWith("02") || pubkeyHex.startsWith("03")) pubkeyHex = pubkeyHex.substring(2);
@@ -421,11 +419,11 @@ export class SilentPayment {
         // alternatively, could compare addresses: SilentPayment.pubkeyToAddress(pubkeyHex) === SilentPayment.pubkeyToAddress(o.script)
 
         // deriving spending privkey for this utxo: d = b_spend + t_k (mod n)
-        const u: Omit<UTXO, 'wif'> = {
+        const u: Omit<UTXO, "wif"> = {
           txid: tx.getId(),
           vout,
-          utxoType: "p2tr"
-        }
+          utxoType: "p2tr",
+        };
 
         ret.push(u);
       }
@@ -435,7 +433,6 @@ export class SilentPayment {
     return ret;
   }
 }
-
 
 function assert(condition: any, message: string): asserts condition {
   if (!condition) throw new Error(message);
