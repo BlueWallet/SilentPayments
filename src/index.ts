@@ -397,8 +397,7 @@ export class SilentPayment {
     return ret;
   }
 
-  static detectOurUtxosUsingTweakbscanBspend(tx: Transaction, tweakHex: string, bscan: string, Bspend: string) {
-    const ret: Omit<UTXO, 'wif'>[] = [];
+  static isOurUtxoUsingTweakbscanBspendAndOutputScript(outputScriptHex: string, tweakHex: string, bscan: string, Bspend: string) {
     const sharedSecret = ecc.getSharedSecret(hexToUint8Array(bscan), hexToUint8Array(tweakHex));
 
     // todo: iterate k (aka label), cause it might be non-zero
@@ -414,13 +413,17 @@ export class SilentPayment {
     let pubkeyHex = uint8ArrayToHex(P_k);
     if (pubkeyHex.startsWith("02") || pubkeyHex.startsWith("03")) pubkeyHex = pubkeyHex.substring(2);
 
+    // match, that means this output is spendable by us;
+    // alternatively, could compare addresses: SilentPayment.pubkeyToAddress(pubkeyHex) === SilentPayment.pubkeyToAddress(o.script)
+    return (outputScriptHex === "5120" + pubkeyHex);
+  }
+
+  static detectOurUtxosUsingTweakbscanBspend(tx: Transaction, tweakHex: string, bscan: string, Bspend: string) {
+    const ret: Omit<UTXO, 'wif'>[] = [];
+
     let vout = 0;
     for (const o of tx.outs) {
-      if (uint8ArrayToHex(o.script) === "5120" + pubkeyHex) {
-        // match, that means this output is spendable by us;
-        // alternatively, could compare addresses: SilentPayment.pubkeyToAddress(pubkeyHex) === SilentPayment.pubkeyToAddress(o.script)
-
-        // deriving spending privkey for this utxo: d = b_spend + t_k (mod n)
+      if (SilentPayment.isOurUtxoUsingTweakbscanBspendAndOutputScript(uint8ArrayToHex(o.script), tweakHex, bscan, Bspend)) {
         const u: Omit<UTXO, 'wif'> = {
           txid: tx.getId(),
           vout,
