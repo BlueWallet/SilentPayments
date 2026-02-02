@@ -2,12 +2,12 @@ import * as crypto from "crypto";
 import { ECPairFactory } from "ecpair";
 import { bech32m } from "bech32";
 import * as bitcoin from "bitcoinjs-lib";
-import { Stack, Transaction, script, address, networks } from "bitcoinjs-lib";
-import { BIP32Factory } from 'bip32';
-import * as bip39 from 'bip39';
+import { Stack, Transaction, script } from "bitcoinjs-lib";
+import { BIP32Factory } from "bip32";
+import * as bip39 from "bip39";
 
-import ecc from "./noble_ecc";
-import { compareUint8Arrays, concatUint8Arrays, hexToUint8Array, uint8ArrayToHex } from "./uint8array-extras";
+import * as ecc from "tiny-secp256k1";
+import { areUint8ArraysEqual, compareUint8Arrays, concatUint8Arrays, hexToUint8Array, uint8ArrayToHex } from "./uint8array-extras";
 
 const ECPair = ECPairFactory(ecc);
 bitcoin.initEccLib(ecc);
@@ -83,8 +83,8 @@ export class SilentPayment {
     // Generating Pmk for each Bm in the group
     for (const group of silentPaymentGroups) {
       // Bscan * a * outpoint_hash
-      const ecdh_shared_secret_step1 = new Uint8Array(ecc.privateMultiply(outpoint_hash, a) as Uint8Array);
-      const ecdh_shared_secret = new Uint8Array(ecc.getSharedSecret(ecdh_shared_secret_step1, group.Bscan) as Uint8Array);
+      const ecdh_shared_secret_step1 = SilentPayment._privateMultiply(outpoint_hash, a);
+      const ecdh_shared_secret = getSharedSecret(ecdh_shared_secret_step1, group.Bscan);
 
       let k = 0;
       for (const [Bm, amount, i] of group.BmValues) {
@@ -136,6 +136,19 @@ export class SilentPayment {
     returnValue[2] = (i >> 8) & 0xff;
     returnValue[3] = i & 0xff;
     return returnValue;
+  }
+
+  private static _privateMultiply(a: Uint8Array, b: Uint8Array): Uint8Array {
+    if (a.length !== 32 || b.length !== 32) {
+      throw new Error("Expected 32-byte scalars for private multiply");
+    }
+
+    const product = (bytesToBigInt(a) * bytesToBigInt(b)) % SECP256K1_N;
+    if (product === BigInt(0)) {
+      throw new Error("Invalid private multiply result");
+    }
+
+    return bigIntTo32Bytes(product);
   }
 
   /**
@@ -320,11 +333,10 @@ export class SilentPayment {
     return result;
   }
 
-
   /**
    * takes BIP-39 mnemonic seed and returns shareable static payment code; also: Bscan, bscan, Bspend, bspend
    */
-  static seedToCode(bip39seed: string, accountNum = 0, passphrase = ''): { address: string; Bscan: Uint8Array; bscan: Uint8Array; Bspend: Uint8Array, bspend: Uint8Array } {
+  static seedToCode(bip39seed: string, accountNum = 0, passphrase = ""): { address: string; Bscan: Uint8Array; bscan: Uint8Array; Bspend: Uint8Array; bspend: Uint8Array } {
     const root = bip32.fromSeed(new Uint8Array(bip39.mnemonicToSeedSync(bip39seed, passphrase)));
     const scanXprv = root.derivePath(`m/352'/0'/${accountNum}'/1'/0`);
     const spendXprv = root.derivePath(`m/352'/0'/${accountNum}'/0'/0`);
@@ -333,12 +345,12 @@ export class SilentPayment {
     const Bspend = spendXprv.publicKey;
     const bspend = spendXprv.privateKey;
 
-    assert(bscan, 'could not derive bscan from seed');
-    assert(bspend, 'could not derive bspend from seed');
+    assert(bscan, "could not derive bscan from seed");
+    assert(bspend, "could not derive bspend from seed");
 
     const bech32Version = 0;
     const words = [bech32Version].concat(bech32m.toWords(concatUint8Arrays([Bscan, Bspend])));
-    const address = bech32m.encode('sp', words, 1023);
+    const address = bech32m.encode("sp", words, 1023);
     return { address, Bscan, bscan, Bspend, bspend };
   }
 
@@ -351,7 +363,7 @@ export class SilentPayment {
   static detectOurUtxos(tx: Transaction, seed: string, tweakHex: string) {
     const ret: UTXO[] = [];
     const code = SilentPayment.seedToCode(seed);
-    const sharedSecret = ecc.getSharedSecret(code.bscan, hexToUint8Array(tweakHex));
+    const sharedSecret = getSharedSecret(code.bscan, hexToUint8Array(tweakHex));
 
     // todo: iterate k (aka label), cause it might be non-zero
     const k = 0;
@@ -359,9 +371,9 @@ export class SilentPayment {
 
     // Compute the expected output pubkey
     const tkG = ecc.pointMultiply(G, t_k);
-    assert(tkG, 'Failed to compute tkG');
+    assert(tkG, "Failed to compute tkG");
     const P_k = ecc.pointAdd(tkG, code.Bspend);
-    assert(P_k, 'Failed to compute output pubkey');
+    assert(P_k, "Failed to compute output pubkey");
 
     let pubkeyHex = uint8ArrayToHex(P_k);
     if (pubkeyHex.startsWith("02") || pubkeyHex.startsWith("03")) pubkeyHex = pubkeyHex.substring(2);
@@ -386,8 +398,8 @@ export class SilentPayment {
           txid: tx.getId(),
           vout,
           wif,
-          utxoType: "p2tr"
-        }
+          utxoType: "p2tr",
+        };
 
         ret.push(u);
       }
@@ -398,7 +410,7 @@ export class SilentPayment {
   }
 
   static isOurUtxoUsingTweakbscanBspendAndOutputScript(outputScriptHex: string, tweakHex: string, bscan: string, Bspend: string) {
-    const sharedSecret = ecc.getSharedSecret(hexToUint8Array(bscan), hexToUint8Array(tweakHex));
+    const sharedSecret = getSharedSecret(hexToUint8Array(bscan), hexToUint8Array(tweakHex));
 
     // todo: iterate k (aka label), cause it might be non-zero
     const k = 0;
@@ -406,29 +418,53 @@ export class SilentPayment {
 
     // Compute the expected output pubkey
     const tkG = ecc.pointMultiply(G, t_k);
-    assert(tkG, 'Failed to compute tkG');
+    assert(tkG, "Failed to compute tkG");
     const P_k = ecc.pointAdd(tkG, hexToUint8Array(Bspend));
-    assert(P_k, 'Failed to compute output pubkey');
+    assert(P_k, "Failed to compute output pubkey");
 
     let pubkeyHex = uint8ArrayToHex(P_k);
     if (pubkeyHex.startsWith("02") || pubkeyHex.startsWith("03")) pubkeyHex = pubkeyHex.substring(2);
 
     // match, that means this output is spendable by us;
     // alternatively, could compare addresses: SilentPayment.pubkeyToAddress(pubkeyHex) === SilentPayment.pubkeyToAddress(o.script)
-    return (outputScriptHex === "5120" + pubkeyHex);
+    return outputScriptHex === "5120" + pubkeyHex;
+  }
+
+  static isOurUtxoUsingTweakbscanBspendAndOutputScriptUint8array(outputScript: Uint8Array, tweak: Uint8Array, bscan: Uint8Array, Bspend: Uint8Array) {
+    const sharedSecret = getSharedSecret(bscan, tweak);
+
+    // todo: iterate k (aka label), cause it might be non-zero
+    const k = 0;
+    const t_k = SilentPayment.taggedHash("BIP0352/SharedSecret", concatUint8Arrays([sharedSecret, SilentPayment._ser32(k)]));
+
+    // Compute the expected output pubkey
+    const tkG = ecc.pointMultiply(G, t_k);
+    assert(tkG, "Failed to compute tkG");
+    const P_k = ecc.pointAdd(tkG, Bspend);
+    assert(P_k, "Failed to compute output pubkey");
+
+    if (P_k[0] === 2 || P_k[0] === 3) {
+      // need to strip first x-only value, and compare only it.
+      //
+      // match, that means this output is spendable by us;
+      // alternatively, could compare addresses: SilentPayment.pubkeyToAddress(pubkeyHex) === SilentPayment.pubkeyToAddress(o.script)
+      return areUint8ArraysEqual(outputScript.subarray(2), P_k.subarray(1));
+    }
+
+    return areUint8ArraysEqual(outputScript.subarray(2), P_k);
   }
 
   static detectOurUtxosUsingTweakbscanBspend(tx: Transaction, tweakHex: string, bscan: string, Bspend: string) {
-    const ret: Omit<UTXO, 'wif'>[] = [];
+    const ret: Omit<UTXO, "wif">[] = [];
 
     let vout = 0;
     for (const o of tx.outs) {
       if (SilentPayment.isOurUtxoUsingTweakbscanBspendAndOutputScript(uint8ArrayToHex(o.script), tweakHex, bscan, Bspend)) {
-        const u: Omit<UTXO, 'wif'> = {
+        const u: Omit<UTXO, "wif"> = {
           txid: tx.getId(),
           vout,
-          utxoType: "p2tr"
-        }
+          utxoType: "p2tr",
+        };
 
         ret.push(u);
       }
@@ -439,7 +475,26 @@ export class SilentPayment {
   }
 }
 
-
 function assert(condition: any, message: string): asserts condition {
   if (!condition) throw new Error(message);
+}
+
+const SECP256K1_N = BigInt("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
+
+function bytesToBigInt(bytes: Uint8Array): bigint {
+  return BigInt(`0x${uint8ArrayToHex(bytes)}`);
+}
+
+function bigIntTo32Bytes(num: bigint): Uint8Array {
+  const hex = num.toString(16).padStart(64, "0");
+  return hexToUint8Array(hex);
+}
+
+function getSharedSecret(privateKey: Uint8Array, publicKey: Uint8Array): Uint8Array {
+  const shared = ecc.pointMultiply(publicKey, privateKey, true);
+  if (!shared) {
+    throw new Error("Failed to derive shared secret");
+  }
+
+  return shared;
 }
