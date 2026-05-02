@@ -13,6 +13,9 @@ const ECPair = ECPairFactory(ecc);
 bitcoin.initEccLib(ecc);
 const bip32 = BIP32Factory(ecc);
 
+// K_MAX defined by BIP0352
+const K_MAX = 2323;
+
 export type UTXOType = "p2wpkh" | "p2sh-p2wpkh" | "p2pkh" | "p2tr" | "non-eligible";
 
 export type UTXO = {
@@ -82,12 +85,18 @@ export class SilentPayment {
 
     // Generating Pmk for each Bm in the group
     for (const group of silentPaymentGroups) {
+      // Checking for the K_MAX limit of elements in a group defined by BIP0352
+      if(group.BmValues.length > K_MAX) {
+        throw new Error(`Silent payment elements for a single recipient group
+      exceed the limit of ${K_MAX}`); 
+      }
+
       // Bscan * a * outpoint_hash
       const ecdh_shared_secret_step1 = SilentPayment._privateMultiply(outpoint_hash, a);
       const ecdh_shared_secret = getSharedSecret(ecdh_shared_secret_step1, group.Bscan);
 
       let k = 0;
-      for (const [Bm, amount, i] of group.BmValues) {
+      for (const [Bm, amount, i] of group.BmValues) { 
         const tk = SilentPayment.taggedHash("BIP0352/SharedSecret", concatUint8Arrays([ecdh_shared_secret, SilentPayment._ser32(k)]));
 
         // Let Pmk = tk·G + Bm
