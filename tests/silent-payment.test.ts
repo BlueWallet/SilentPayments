@@ -491,3 +491,21 @@ it("can detect incoming payment in tx output (having output script only)  using 
 
   console.log("1000 tweak mults took", (end - start) / 1000, "sec");
 });
+
+it("sumPubKeys is order-independent when an intermediate sum is the point at infinity", () => {
+  // Reporter scalars from BlueWallet/SilentPayments#30 (A + (-A) = 0 mod n).
+  const a = hexToUint8Array("a6df6a0bb448992a301df4258e06a89fe7cf7146f59ac3bd5ff26083acb22ceb");
+  const minusA = hexToUint8Array("592095f44bb766d5cfe20bda71f9575ed2df6b9fb9addc7e5fdffe0923841456");
+  const Apub = ecc.pointFromScalar(a, true);
+  const minusApub = ecc.pointFromScalar(minusA, true);
+  assert.ok(Apub);
+  assert.ok(minusApub);
+
+  const cancelFirst = SilentPayment.sumPubKeys([Apub, minusApub, Apub]);
+  const cancelLast = SilentPayment.sumPubKeys([Apub, Apub, minusApub]);
+
+  expect(cancelFirst).not.toBeNull();
+  expect(cancelLast).not.toBeNull();
+  assert.deepStrictEqual(cancelFirst, cancelLast);
+  assert.deepStrictEqual(cancelFirst, Apub);
+});
