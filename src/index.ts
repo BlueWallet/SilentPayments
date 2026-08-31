@@ -199,11 +199,21 @@ export class SilentPayment {
       throw new Error("No eligible UTXOs with private keys found");
     }
 
-    // summary of every item in array
-    const ret = keys.reduce((acc, key) => {
-      return new Uint8Array(ecc.privateAdd(acc, key) as Uint8Array);
-    });
+    // Sum scalars left-to-right. tiny-secp256k1 privateAdd returns null for the
+    // zero scalar (identity), which is a valid intermediate when keys cancel.
+    let ret: Uint8Array | null = keys[0];
+    for (let i = 1; i < keys.length; i++) {
+      if (ret === null) {
+        ret = keys[i];
+        continue;
+      }
+      const sum = ecc.privateAdd(ret, keys[i]);
+      ret = sum === null ? null : new Uint8Array(sum);
+    }
 
+    if (ret === null) {
+      throw new Error("Sum of private keys is zero");
+    }
     return ret;
   }
 
@@ -301,13 +311,28 @@ export class SilentPayment {
     if (pubkeys.length === 0) return null;
 
     let result = pubkeys[0];
+    let atIdentity = false;
     for (let i = 1; i < pubkeys.length; i++) {
+      if (atIdentity) {
+        result = pubkeys[i];
+        atIdentity = false;
+        continue;
+      }
       const sum = ecc.pointAdd(result, pubkeys[i], compressed);
-      if (!sum) return null;
+      if (!sum) {
+        // Valid opposite points sum to infinity. Keep going; only the final
+        // sum being identity is a failure. Invalid points still fail.
+        if (ecc.isPoint(result) && ecc.isPoint(pubkeys[i])) {
+          atIdentity = true;
+          continue;
+        }
+        return null;
+      }
       result = sum;
     }
 
-    if (result.length === 32) {
+    if (atIdentity) return null;
+    if (result!.length === 32) {
       // We have an x-only point, need to determine correct parity
       // Use the pointCompress function to get the proper compressed format
       try {
