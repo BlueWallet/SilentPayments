@@ -49,6 +49,8 @@ function pubkeyFromWitnessStack(witnessStack: Uint8Array[]): Uint8Array | null {
   return pubkeyBytes;
 }
 
+export type SilentPaymentInputType = "p2pkh" | "p2wpkh" | "p2sh-p2wpkh" | "p2tr" | "non-eligible";
+
 /**
  * Extract the silent-payments-eligible pubkey for one input, per BIP-352.
  * Returns null when the input is not eligible or no pubkey can be determined.
@@ -114,6 +116,24 @@ export function getEligiblePubkeyFromInput(prevoutScript: Uint8Array, scriptSig:
   }
 
   return null;
+}
+
+/** Classify an input for silent payments (sender UTXO typing and test vector parsing). */
+export function getSilentPaymentInputType(prevoutScript: Uint8Array, scriptSig: Uint8Array, witness: Uint8Array[]): SilentPaymentInputType {
+  let candidate: SilentPaymentInputType = "non-eligible";
+  if (isP2pkh(prevoutScript)) {
+    candidate = "p2pkh";
+  } else if (isP2sh(prevoutScript)) {
+    candidate = "p2sh-p2wpkh";
+  } else if (isP2wpkh(prevoutScript)) {
+    candidate = "p2wpkh";
+  } else if (isP2tr(prevoutScript)) {
+    candidate = "p2tr";
+  } else {
+    return "non-eligible";
+  }
+
+  return getEligiblePubkeyFromInput(prevoutScript, scriptSig, witness) === null ? "non-eligible" : candidate;
 }
 
 export function isValidScalar(bytes: Uint8Array): boolean {
