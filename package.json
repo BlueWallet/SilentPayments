@@ -6,7 +6,8 @@
   "scripts": {
     "tslint": "tsc src/index.ts --noEmit --skipLibCheck --target esnext --moduleResolution nodenext --module NodeNext ",
     "lint:write": "prettier . --write",
-    "test": "vitest run tests/"
+    "test": "vitest run tests/",
+    "generate:receiving-vectors": "node tests/scripts/generate-receiving-vectors.mjs"
   },
   "author": "overtorment",
   "license": "MIT",
