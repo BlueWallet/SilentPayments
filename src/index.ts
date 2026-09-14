@@ -177,11 +177,7 @@ export class SilentPayment {
    * BIP-352 unlabeled scan: consecutive k starting at 0 until a gap or K_MAX.
    * `taprootVoutsByPubkey` maps x-only output pubkey hex → vout.
    */
-  private static _scanUnlabeledOutputs(
-    sharedSecret: Uint8Array,
-    Bspend: Uint8Array,
-    taprootVoutsByPubkey: Map<string, number>
-  ): Array<{ t_k: Uint8Array; vout: number }> {
+  private static _scanUnlabeledOutputs(sharedSecret: Uint8Array, Bspend: Uint8Array, taprootVoutsByPubkey: Map<string, number>): Array<{ t_k: Uint8Array; vout: number }> {
     const wallet: Array<{ t_k: Uint8Array; vout: number }> = [];
     let k = 0;
 
@@ -465,12 +461,7 @@ export class SilentPayment {
   }
 
   static isOurUtxoUsingTweakbscanBspendAndOutputScript(outputScriptHex: string, tweakHex: string, bscan: string, Bspend: string) {
-    return SilentPayment.isOurUtxoUsingTweakbscanBspendAndOutputScriptUint8array(
-      hexToUint8Array(outputScriptHex),
-      hexToUint8Array(tweakHex),
-      hexToUint8Array(bscan),
-      hexToUint8Array(Bspend)
-    );
+    return SilentPayment.isOurUtxoUsingTweakbscanBspendAndOutputScriptUint8array(hexToUint8Array(outputScriptHex), hexToUint8Array(tweakHex), hexToUint8Array(bscan), hexToUint8Array(Bspend));
   }
 
   static isOurUtxoUsingTweakbscanBspendAndOutputScriptUint8array(outputScript: Uint8Array, tweak: Uint8Array, bscan: Uint8Array, Bspend: Uint8Array) {

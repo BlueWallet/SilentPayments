@@ -245,9 +245,7 @@ tests.forEach((testCase, index) => {
     }
 
     // A single output script can only be identified at k=0.
-    const isolatedHits = testCase.txOutputScripts.filter((script) =>
-      SilentPayment.isOurUtxoUsingTweakbscanBspendAndOutputScript(script, tweakHex, testCase.bscan, testCase.Bspend)
-    ).length;
+    const isolatedHits = testCase.txOutputScripts.filter((script) => SilentPayment.isOurUtxoUsingTweakbscanBspendAndOutputScript(script, tweakHex, testCase.bscan, testCase.Bspend)).length;
     assert.strictEqual(isolatedHits, foundPubKeys.length > 0 ? 1 : 0);
   });
 });
