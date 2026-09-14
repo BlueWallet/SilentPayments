@@ -151,7 +151,8 @@ export function getUTXOType(vin: Vin): UTXOType {
     if (isP2wpkh(redeemScript)) {
       const br = new BufferReader(hexToUint8Array(vin.txinwitness));
       const witnessStack = br.readVector();
-      if (witnessStack[1].length === 33) {
+      const witnessPubkey = witnessStack[witnessStack.length - 1];
+      if (witnessPubkey.length === 33) {
         return "p2wpkh";
       }
     }
@@ -159,7 +160,8 @@ export function getUTXOType(vin: Vin): UTXOType {
   if (isP2wpkh(spk)) {
     const br = new BufferReader(hexToUint8Array(vin.txinwitness));
     const witnessStack = br.readVector();
-    if (witnessStack[1].length === 33) {
+    const witnessPubkey = witnessStack[witnessStack.length - 1];
+    if (witnessPubkey.length === 33) {
       return "p2wpkh";
     }
   }
