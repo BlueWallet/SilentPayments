@@ -7,14 +7,14 @@ import { BIP32Factory } from "bip32";
 import * as bip39 from "bip39";
 
 import * as ecc from "tiny-secp256k1";
-import { getEligiblePubkeyFromInput, isValidScalar } from "./input-pubkeys";
+import { getEligiblePubkeyFromInput, isValidScalar, type SilentPaymentInputType } from "./input-pubkeys";
 import { areUint8ArraysEqual, compareUint8Arrays, concatUint8Arrays, hexToUint8Array, uint8ArrayToHex } from "./uint8array-extras";
 
 const ECPair = ECPairFactory(ecc);
 bitcoin.initEccLib(ecc);
 const bip32 = BIP32Factory(ecc);
 
-export type UTXOType = "p2wpkh" | "p2sh-p2wpkh" | "p2pkh" | "p2tr" | "non-eligible";
+export type UTXOType = SilentPaymentInputType;
 
 export type UTXO = {
   txid: string;
@@ -99,16 +99,17 @@ export class SilentPayment {
 
       let k = 0;
       for (const [Bm, amount, i] of group.BmValues) {
-        const tk = SilentPayment.taggedHash("BIP0352/SharedSecret", concatUint8Arrays([ecdh_shared_secret, SilentPayment._ser32(k)]));
-        if (!isValidScalar(tk)) {
+        const tk = SilentPayment._sharedSecretTweakAtK(ecdh_shared_secret, k);
+        if (tk === null) {
           throw new Error("Invalid shared secret tweak");
         }
 
-        // Let Pmk = tk·G + Bm
-        const Pmk = new Uint8Array(ecc.pointAdd(ecc.pointMultiply(G, tk) as Uint8Array, Bm) as Uint8Array);
+        const outputXonly = SilentPayment._expectedOutputXonlyAtK(tk, Bm);
+        if (outputXonly === null) {
+          throw new Error("Invalid silent payment output key");
+        }
 
-        // Encode Pmk as a BIP341 taproot output
-        const address = SilentPayment.pubkeyToAddress(uint8ArrayToHex(Pmk.slice(1)));
+        const address = SilentPayment.pubkeyToAddress(uint8ArrayToHex(outputXonly));
         const newTarget: Target = { address };
         newTarget.value = amount;
         ret[i] = newTarget;
@@ -150,6 +151,25 @@ export class SilentPayment {
     returnValue[2] = (i >> 8) & 0xff;
     returnValue[3] = i & 0xff;
     return returnValue;
+  }
+
+  private static _sharedSecretTweakAtK(sharedSecret: Uint8Array, k: number): Uint8Array | null {
+    const t_k = SilentPayment.taggedHash("BIP0352/SharedSecret", concatUint8Arrays([sharedSecret, SilentPayment._ser32(k)]));
+    return isValidScalar(t_k) ? t_k : null;
+  }
+
+  private static _expectedOutputXonlyAtK(t_k: Uint8Array, Bm: Uint8Array): Uint8Array | null {
+    const tkG = ecc.pointMultiply(G, t_k);
+    if (!tkG) {
+      return null;
+    }
+
+    const P_k = ecc.pointAdd(tkG, Bm);
+    if (!P_k) {
+      return null;
+    }
+
+    return P_k.length === 33 ? P_k.subarray(1) : P_k;
   }
 
   private static _privateMultiply(a: Uint8Array, b: Uint8Array): Uint8Array {
@@ -390,16 +410,17 @@ export class SilentPayment {
 
     // todo: iterate k (aka label), cause it might be non-zero
     const k = 0;
-    const t_k = SilentPayment.taggedHash("BIP0352/SharedSecret", concatUint8Arrays([sharedSecret, SilentPayment._ser32(k)]));
+    const t_k = SilentPayment._sharedSecretTweakAtK(sharedSecret, k);
+    if (t_k === null) {
+      return ret;
+    }
 
-    // Compute the expected output pubkey
-    const tkG = ecc.pointMultiply(G, t_k);
-    assert(tkG, "Failed to compute tkG");
-    const P_k = ecc.pointAdd(tkG, code.Bspend);
-    assert(P_k, "Failed to compute output pubkey");
+    const outputXonly = SilentPayment._expectedOutputXonlyAtK(t_k, code.Bspend);
+    if (outputXonly === null) {
+      return ret;
+    }
 
-    let pubkeyHex = uint8ArrayToHex(P_k);
-    if (pubkeyHex.startsWith("02") || pubkeyHex.startsWith("03")) pubkeyHex = pubkeyHex.substring(2);
+    const pubkeyHex = uint8ArrayToHex(outputXonly);
 
     let vout = 0;
     for (const o of tx.outs) {
@@ -437,20 +458,17 @@ export class SilentPayment {
 
     // todo: iterate k (aka label), cause it might be non-zero
     const k = 0;
-    const t_k = SilentPayment.taggedHash("BIP0352/SharedSecret", concatUint8Arrays([sharedSecret, SilentPayment._ser32(k)]));
+    const t_k = SilentPayment._sharedSecretTweakAtK(sharedSecret, k);
+    if (t_k === null) {
+      return false;
+    }
 
-    // Compute the expected output pubkey
-    const tkG = ecc.pointMultiply(G, t_k);
-    assert(tkG, "Failed to compute tkG");
-    const P_k = ecc.pointAdd(tkG, hexToUint8Array(Bspend));
-    assert(P_k, "Failed to compute output pubkey");
+    const outputXonly = SilentPayment._expectedOutputXonlyAtK(t_k, hexToUint8Array(Bspend));
+    if (outputXonly === null) {
+      return false;
+    }
 
-    let pubkeyHex = uint8ArrayToHex(P_k);
-    if (pubkeyHex.startsWith("02") || pubkeyHex.startsWith("03")) pubkeyHex = pubkeyHex.substring(2);
-
-    // match, that means this output is spendable by us;
-    // alternatively, could compare addresses: SilentPayment.pubkeyToAddress(pubkeyHex) === SilentPayment.pubkeyToAddress(o.script)
-    return outputScriptHex === "5120" + pubkeyHex;
+    return outputScriptHex === "5120" + uint8ArrayToHex(outputXonly);
   }
 
   static isOurUtxoUsingTweakbscanBspendAndOutputScriptUint8array(outputScript: Uint8Array, tweak: Uint8Array, bscan: Uint8Array, Bspend: Uint8Array) {
@@ -458,23 +476,17 @@ export class SilentPayment {
 
     // todo: iterate k (aka label), cause it might be non-zero
     const k = 0;
-    const t_k = SilentPayment.taggedHash("BIP0352/SharedSecret", concatUint8Arrays([sharedSecret, SilentPayment._ser32(k)]));
-
-    // Compute the expected output pubkey
-    const tkG = ecc.pointMultiply(G, t_k);
-    assert(tkG, "Failed to compute tkG");
-    const P_k = ecc.pointAdd(tkG, Bspend);
-    assert(P_k, "Failed to compute output pubkey");
-
-    if (P_k[0] === 2 || P_k[0] === 3) {
-      // need to strip first x-only value, and compare only it.
-      //
-      // match, that means this output is spendable by us;
-      // alternatively, could compare addresses: SilentPayment.pubkeyToAddress(pubkeyHex) === SilentPayment.pubkeyToAddress(o.script)
-      return areUint8ArraysEqual(outputScript.subarray(2), P_k.subarray(1));
+    const t_k = SilentPayment._sharedSecretTweakAtK(sharedSecret, k);
+    if (t_k === null) {
+      return false;
     }
 
-    return areUint8ArraysEqual(outputScript.subarray(2), P_k);
+    const outputXonly = SilentPayment._expectedOutputXonlyAtK(t_k, Bspend);
+    if (outputXonly === null) {
+      return false;
+    }
+
+    return areUint8ArraysEqual(outputScript.subarray(2), outputXonly);
   }
 
   static detectOurUtxosUsingTweakbscanBspend(tx: Transaction, tweakHex: string, bscan: string, Bspend: string) {

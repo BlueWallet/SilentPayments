@@ -1,18 +1,9 @@
 import { UTXOType } from "../src";
-import * as crypto from "crypto";
-import { areUint8ArraysEqual, hexToUint8Array, readUInt16, readUInt32 } from "../src/uint8array-extras";
+import { getSilentPaymentInputType } from "../src/input-pubkeys";
+import { hexToUint8Array, readUInt16, readUInt32 } from "../src/uint8array-extras";
 
-// The following utilities are provided to determine the UTXOType of a transaction input.
-// This is necessary for parsing the test vectors from BIP352, but in practice a sending
-// wallet will already know the UTXOType for each UTXO it indends to spend and can set the
-// UTXOType field directly.
-//
-// For example, if the sending wallet only supports native segwit, all UTXOs it spends will
-// be UTXOType = 'p2wpkh'.
-//
-// For receiving, these functions are also not necessary in practice as it is assumed any
-// light client wallet is getting the 33 bytes of input public data from a full node that has
-// already done the transaction parsing and determined which inputs are eligible and which are not.
+// Parses BIP-352 test vector vin entries into UTXOType for sender tests.
+// Production senders should set utxoType directly on UTXOs they already know.
 class BufferReader {
   private b: Uint8Array;
   private offset: number;
@@ -68,8 +59,6 @@ class BufferReader {
   }
 }
 
-const NUMS_H = hexToUint8Array("50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0");
-
 export type Vin = {
   txid: string;
   vout: number;
@@ -83,108 +72,18 @@ export type Vin = {
   private_key: string;
 };
 
-function hash160(s: Uint8Array): Uint8Array {
-  const sha256Digest = new Uint8Array(crypto.createHash("sha256").update(s).digest());
-  const ripemd160Digest = crypto.createHash("ripemd160").update(sha256Digest).digest();
-  return new Uint8Array(ripemd160Digest);
-}
-
-function isP2tr(spk: Uint8Array): boolean {
-  if (spk.length !== 34) {
-    return false;
+function witnessFromHex(txinwitness: string): Uint8Array[] {
+  if (!txinwitness) {
+    return [];
   }
-  // OP_1 OP_PUSHBYTES_32 <32 bytes>
-  return spk[0] === 0x51 && spk[1] === 0x20;
-}
-
-function isP2wpkh(spk: Uint8Array): boolean {
-  if (spk.length !== 22) {
-    return false;
-  }
-  // OP_0 OP_PUSHBYTES_20 <20 bytes>
-  return spk[0] === 0x00 && spk[1] === 0x14;
-}
-
-function isP2sh(spk: Uint8Array): boolean {
-  if (spk.length !== 23) {
-    return false;
-  }
-  // OP_HASH160 OP_PUSHBYTES_20 <20 bytes> OP_EQUAL
-  return spk[0] === 0xa9 && spk[1] === 0x14 && spk[spk.length - 1] === 0x87;
-}
-
-function isP2pkh(spk: Uint8Array): boolean {
-  if (spk.length !== 25) {
-    return false;
-  }
-  // OP_DUP OP_HASH160 OP_PUSHBYTES_20 <20 bytes> OP_EQUALVERIFY OP_CHECKSIG
-  return spk[0] === 0x76 && spk[1] === 0xa9 && spk[2] === 0x14 && spk[spk.length - 2] === 0x88 && spk[spk.length - 1] === 0xac;
+  const br = new BufferReader(hexToUint8Array(txinwitness));
+  return br.readVector();
 }
 
 export function getUTXOType(vin: Vin): UTXOType {
-  const spk = hexToUint8Array(vin.prevout.scriptPubKey.hex);
-  if (isP2pkh(spk)) {
-    // skip the first 3 op_codes and grab the 20 byte hash
-    // from the scriptPubKey
-    const spkHash = spk.slice(3, 3 + 20);
-    const scriptSig = hexToUint8Array(vin.scriptSig);
-    for (let i = scriptSig.length; i > 0; i--) {
-      if (i - 33 >= 0) {
-        // starting from the back, we move over the scriptSig with a 33 byte
-        // window (to match a compressed pubkey). we hash this and check if it matches
-        // the 20 byte has from the scriptPubKey. for standard scriptSigs, this will match
-        // right away because the pubkey is the last item in the scriptSig.
-        // if its a non-standard (malleated) scriptSig, we will still find the pubkey if its
-        // a compressed pubkey.
-        //
-        // note: this is an incredibly inefficient implementation, for demonstration purposes only.
-        const pubkeyBytes = scriptSig.slice(i - 33, i);
-        const pubkeyHash = hash160(pubkeyBytes);
-        if (areUint8ArraysEqual(pubkeyHash, spkHash)) {
-          return "p2pkh";
-        }
-      }
-    }
-  }
-  if (isP2sh(spk)) {
-    const redeemScript = hexToUint8Array(vin.scriptSig).slice(1);
-    if (isP2wpkh(redeemScript)) {
-      const br = new BufferReader(hexToUint8Array(vin.txinwitness));
-      const witnessStack = br.readVector();
-      const witnessPubkey = witnessStack[witnessStack.length - 1];
-      if (witnessPubkey.length === 33) {
-        return "p2wpkh";
-      }
-    }
-  }
-  if (isP2wpkh(spk)) {
-    const br = new BufferReader(hexToUint8Array(vin.txinwitness));
-    const witnessStack = br.readVector();
-    const witnessPubkey = witnessStack[witnessStack.length - 1];
-    if (witnessPubkey.length === 33) {
-      return "p2wpkh";
-    }
-  }
-  if (isP2tr(spk)) {
-    const br = new BufferReader(hexToUint8Array(vin.txinwitness));
-    const witnessStack = br.readVector();
-    if (witnessStack.length >= 1) {
-      if (witnessStack.length > 1 && witnessStack[witnessStack.length - 1][0] === 0x50) {
-        // Last item is annex
-        witnessStack.pop();
-      }
-      if (witnessStack.length > 1) {
-        // Script-path spend
-        const controlBlock = witnessStack[witnessStack.length - 1];
-        //  control block is <control byte> <32 byte internal key> and 0 or more <32 byte hash>
-        const internalKey = controlBlock.slice(1, 33);
-        if (areUint8ArraysEqual(internalKey, NUMS_H)) {
-          // Skip if NUMS_H
-          return "non-eligible";
-        }
-      }
-      return "p2tr";
-    }
-  }
-  return "non-eligible";
+  return getSilentPaymentInputType(
+    hexToUint8Array(vin.prevout.scriptPubKey.hex),
+    hexToUint8Array(vin.scriptSig),
+    witnessFromHex(vin.txinwitness)
+  );
 }
