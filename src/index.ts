@@ -32,6 +32,9 @@ export type SilentPaymentGroup = {
   BmValues: Array<[Uint8Array, number | undefined, number]>;
 };
 
+// K_MAX defined by BIP0352
+const K_MAX = 2323;
+
 export const G = hexToUint8Array("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798");
 
 export class SilentPayment {
@@ -75,6 +78,10 @@ export class SilentPayment {
       }
     }
     if (silentPaymentGroups.length === 0) return ret; // passthrough
+
+    if (silentPaymentGroups.some((group) => group.BmValues.length > K_MAX)) {
+      throw new Error(`Silent payment elements for a single recipient group exceed the limit of ${K_MAX}`);
+    }
 
     const a = SilentPayment._sumPrivkeys(utxos);
     const A = new Uint8Array(ecc.pointFromScalar(a) as Uint8Array);
