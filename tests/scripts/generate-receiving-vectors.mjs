@@ -3,7 +3,18 @@
  * Port BIP-352 receiving vectors into tests/data/receiving_test_vectors.json
  * shaped for our Transaction + prevoutScripts + tweak/detection APIs.
  *
- * Usage: node tests/scripts/generate-receiving-vectors.mjs
+ * Source: tests/data/send_and_receive_test_vectors.json (official BIP-352 vectors)
+ * Output: tests/data/receiving_test_vectors.json (committed; CI tests against this file)
+ *
+ * When to run:
+ * - After syncing/updating send_and_receive_test_vectors.json from the BIP repo
+ * - After changing this script's output shape or skip rules
+ * - After changing how receiving tests consume the generated vectors
+ *
+ * Do NOT run on every dev session or in CI — regenerate only when inputs or
+ * porting logic change, then commit the updated receiving_test_vectors.json.
+ *
+ * Usage: npm run generate:receiving-vectors
  */
 
 import fs from "node:fs";
