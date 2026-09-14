@@ -492,12 +492,23 @@ it("can detect incoming payment in tx output (having output script only)  using 
   console.log("1000 tweak mults took", (end - start) / 1000, "sec");
 });
 
+// Reporter scalars from BlueWallet/SilentPayments#30 (A + (-A) = 0 mod n).
+const ISSUE30_A = hexToUint8Array("a6df6a0bb448992a301df4258e06a89fe7cf7146f59ac3bd5ff26083acb22ceb");
+const ISSUE30_MINUS_A = hexToUint8Array("592095f44bb766d5cfe20bda71f9575ed2df6b9fb9addc7e5fdffe0923841456");
+const ISSUE30_SP = "sp1qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqjuexzk6murw56suy3e0rd2cgqvycxttddwsvgxe2usfpxumr70xc9pkqwv";
+
+function issue30P2wpkh(priv: Uint8Array, vout: number) {
+  return {
+    txid: "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
+    vout,
+    wif: ECPair.fromPrivateKey(priv).toWIF(),
+    utxoType: "p2wpkh" as UTXOType,
+  };
+}
+
 it("sumPubKeys is order-independent when an intermediate sum is the point at infinity", () => {
-  // Reporter scalars from BlueWallet/SilentPayments#30 (A + (-A) = 0 mod n).
-  const a = hexToUint8Array("a6df6a0bb448992a301df4258e06a89fe7cf7146f59ac3bd5ff26083acb22ceb");
-  const minusA = hexToUint8Array("592095f44bb766d5cfe20bda71f9575ed2df6b9fb9addc7e5fdffe0923841456");
-  const Apub = ecc.pointFromScalar(a, true);
-  const minusApub = ecc.pointFromScalar(minusA, true);
+  const Apub = ecc.pointFromScalar(ISSUE30_A, true);
+  const minusApub = ecc.pointFromScalar(ISSUE30_MINUS_A, true);
   assert.ok(Apub);
   assert.ok(minusApub);
 
@@ -508,4 +519,36 @@ it("sumPubKeys is order-independent when an intermediate sum is the point at inf
   expect(cancelLast).not.toBeNull();
   assert.deepStrictEqual(cancelFirst, cancelLast);
   assert.deepStrictEqual(cancelFirst, Apub);
+});
+
+it("sumPubKeys returns null when the final sum is the point at infinity", () => {
+  const Apub = ecc.pointFromScalar(ISSUE30_A, true);
+  const minusApub = ecc.pointFromScalar(ISSUE30_MINUS_A, true);
+  assert.ok(Apub);
+  assert.ok(minusApub);
+
+  assert.strictEqual(SilentPayment.sumPubKeys([Apub, minusApub]), null);
+  assert.strictEqual(SilentPayment.sumPubKeys([Apub, minusApub, Apub, minusApub]), null);
+});
+
+it("createTransaction is order-independent when an intermediate privkey sum is zero", () => {
+  const sp = new SilentPayment();
+  const targets = [{ address: ISSUE30_SP, value: 1000 }];
+  // Hand-checked: same dummy outpoints + scalar sum A → this taproot output.
+  const expected = [{ address: "bc1p866w5jg45lp0phjw0qym0mmtcfvsstj7g03sqch4elu2j476vwfq63q9y0", value: 1000 }];
+
+  assert.deepStrictEqual(sp.createTransaction([issue30P2wpkh(ISSUE30_A, 0), issue30P2wpkh(ISSUE30_MINUS_A, 1), issue30P2wpkh(ISSUE30_A, 2)], targets), expected);
+  assert.deepStrictEqual(sp.createTransaction([issue30P2wpkh(ISSUE30_A, 0), issue30P2wpkh(ISSUE30_A, 1), issue30P2wpkh(ISSUE30_MINUS_A, 2)], targets), expected);
+});
+
+it("createTransaction throws when private keys sum to zero", () => {
+  const sp = new SilentPayment();
+  const targets = [{ address: ISSUE30_SP, value: 1000 }];
+  const b = hexToUint8Array("0000000000000000000000000000000000000000000000000000000000000002");
+  const minusAB = ecc.privateNegate(ecc.privateAdd(ISSUE30_A, b) as Uint8Array);
+
+  expect(() => sp.createTransaction([issue30P2wpkh(ISSUE30_A, 0), issue30P2wpkh(ISSUE30_MINUS_A, 1)], targets)).toThrow("Sum of private keys is zero");
+  expect(() =>
+    sp.createTransaction([issue30P2wpkh(ISSUE30_A, 0), issue30P2wpkh(b, 1), issue30P2wpkh(minusAB, 2)], targets)
+  ).toThrow("Sum of private keys is zero");
 });
