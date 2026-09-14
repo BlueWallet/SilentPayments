@@ -552,3 +552,42 @@ it("createTransaction throws when private keys sum to zero", () => {
     sp.createTransaction([issue30P2wpkh(ISSUE30_A, 0), issue30P2wpkh(b, 1), issue30P2wpkh(minusAB, 2)], targets)
   ).toThrow("Sum of private keys is zero");
 });
+
+const K_MAX = 2323;
+const K_MAX_SP_A = "sp1qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqjuexzk6murw56suy3e0rd2cgqvycxttddwsvgxe2usfpxumr70xc9pkqwv";
+const K_MAX_SP_B = "sp1qqgrz6j0lcqnc04vxccydl0kpsj4frfje0ktmgcl2t346hkw30226xqupawdf48k8882j0strrvcmgg2kdawz53a54dd376ngdhak364hzcmynqtn";
+
+function repeatSpTargets(address: string, n: number) {
+  return Array.from({ length: n }, () => ({ address, value: 1 }));
+}
+
+it("createTransaction throws when a recipient group exceeds K_max", () => {
+  const sp = new SilentPayment();
+  expect(() => sp.createTransaction([], repeatSpTargets(K_MAX_SP_A, K_MAX + 1))).toThrow("Silent payment elements for a single recipient group exceed the limit of 2323");
+});
+
+it("createTransaction rejects an oversize later group before summing keys", () => {
+  const sp = new SilentPayment();
+  const targets = [{ address: K_MAX_SP_B, value: 1 }, ...repeatSpTargets(K_MAX_SP_A, K_MAX + 1)];
+  expect(() => sp.createTransaction([], targets)).toThrow("Silent payment elements for a single recipient group exceed the limit of 2323");
+});
+
+it("createTransaction allows a recipient group of exactly K_max", () => {
+  const sp = new SilentPayment();
+  expect(() => sp.createTransaction([], repeatSpTargets(K_MAX_SP_A, K_MAX))).toThrow("No UTXOs provided");
+});
+
+it("createTransaction produces outputs for a recipient group of exactly K_max", () => {
+  const sp = new SilentPayment();
+  const utxos = [
+    {
+      txid: "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
+      vout: 0,
+      wif: ECPair.fromPrivateKey(hexToUint8Array("1cd5e8f6b3f29505ed1da7a5806291ebab6491c6a172467e44debe255428a192")).toWIF(),
+      utxoType: "p2wpkh" as UTXOType,
+    },
+  ];
+  const generated = sp.createTransaction(utxos, repeatSpTargets(K_MAX_SP_A, K_MAX));
+  assert.strictEqual(generated.length, K_MAX);
+  assert.ok(generated.every((target) => target.address?.startsWith("bc1p")));
+});
