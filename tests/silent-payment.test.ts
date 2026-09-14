@@ -1,18 +1,19 @@
 import { ECPairFactory } from "ecpair";
 import assert from "node:assert";
 import { expect, it } from "vitest";
-import { Stack, Transaction, script, address, networks } from "bitcoinjs-lib";
-import { G, getPubkeys, SilentPayment, UTXOType } from "../src";
+import { Transaction } from "bitcoinjs-lib";
+import { K_MAX, SilentPayment, UTXOType } from "../src";
 import * as ecc from "tiny-secp256k1";
-import { compareUint8Arrays, concatUint8Arrays, hexToUint8Array, uint8ArrayToHex } from "../src/uint8array-extras";
+import { hexToUint8Array, uint8ArrayToHex } from "../src/uint8array-extras";
 import { Vin, getUTXOType } from "../tests/utils";
-import jsonInput from "./data/sending_test_vectors.json";
+import jsonInput from "./data/send_and_receive_test_vectors.json";
+import tweakVectors from "./data/tweak_test_vectors.json";
 
 const ECPair = ECPairFactory(ecc);
 
 function exactMatch(a: string[], b: string[]): boolean {
-  const sortedA = a.sort();
-  const sortedB = b.sort();
+  const sortedA = [...a].sort();
+  const sortedB = [...b].sort();
   return sortedA.length === sortedB.length && sortedA.every((value, index) => value === sortedB[index]);
 }
 
@@ -20,13 +21,21 @@ function matchSubset(generated: string[], expected: string[][]): boolean {
   return expected.some((subArray) => exactMatch(generated, subArray));
 }
 
+type Recipient = string | {
+  address: string;
+  scan_pub_key?: string;
+  spend_pub_key?: string;
+  count?: number;
+};
+
 type Given = {
   vin: Vin[];
-  recipients: string[];
+  recipients: Recipient[];
 };
 
 type Expected = {
   outputs: string[][];
+  shared_secrets?: Array<string | null>;
 };
 
 type Sending = {
@@ -39,7 +48,49 @@ type TestCase = {
   sending: Sending[];
 };
 
+type TweakVectorInput = {
+  txid: string;
+  vout: number;
+  scriptSig: string;
+  witness: string[];
+  prevoutScript: string;
+};
+
+type TweakVector = {
+  comment: string;
+  inputs: TweakVectorInput[];
+  expected: {
+    input_pub_keys: string[];
+    input_pub_key_sum: string | null;
+    tweak: string | null;
+  };
+};
+
 const tests = jsonInput as unknown as Array<TestCase>;
+
+function expandRecipients(recipients: Recipient[]): string[] {
+  return recipients.flatMap((recipient) => {
+    if (typeof recipient === "string") {
+      return [recipient];
+    }
+    const count = recipient.count ?? 1;
+    return Array.from({ length: count }, () => recipient.address);
+  });
+}
+
+function buildTxFromTweakVectorInputs(inputs: TweakVectorInput[]): Transaction {
+  const tx = new Transaction();
+  for (const input of inputs) {
+    tx.addInput(Buffer.from(input.txid, "hex").reverse(), input.vout, 0xfffffffd, Buffer.from(input.scriptSig, "hex"));
+  }
+  inputs.forEach((input, index) => {
+    tx.setWitness(
+      index,
+      input.witness.map((witnessItem) => Buffer.from(witnessItem, "hex"))
+    );
+  });
+  return tx;
+}
 
 it("smoke test", () => {
   const sp = new SilentPayment();
@@ -59,23 +110,59 @@ tests.forEach((testCase, index) => {
     const noEligibleUtxos = utxos.every((utxo) => utxo.utxoType === "non-eligible");
 
     // Prepare the 'recipients' array
-    const recipients = sending.given.recipients.map((recipient) => ({
-      address: recipient,
+    const recipients = expandRecipients(sending.given.recipients).map((address) => ({
+      address,
       value: 1,
     }));
 
-    it(`Test Case: ${testCase.comment}`, () => {
+    it(`Sending: ${testCase.comment}`, () => {
       const sp = new SilentPayment();
       if (noEligibleUtxos) {
         expect(() => {
           sp.createTransaction(utxos, recipients);
         }).toThrow("No eligible UTXOs with private keys found");
+      } else if (testCase.comment.includes("sum up to zero") || testCase.comment.includes("point at infinity")) {
+        expect(() => {
+          sp.createTransaction(utxos, recipients);
+        }).toThrow("Sum of private keys is zero");
+      } else if (testCase.comment.includes("K_max")) {
+        expect(() => {
+          sp.createTransaction(utxos, recipients);
+        }).toThrow(`Silent payment elements for a single recipient group exceed the limit of ${K_MAX}`);
       } else {
         const generated = sp.createTransaction(utxos, recipients);
         const generated_pubkeys: string[] = generated.map((obj) => SilentPayment.addressToPubkey(String(obj.address))).filter(Boolean) as string[];
         assert(matchSubset(generated_pubkeys, sending.expected.outputs));
       }
     });
+  });
+});
+
+/* Tweak / eligible-pubkey tests (Transaction + prevoutScripts API) */
+(tweakVectors as TweakVector[]).forEach((testCase) => {
+  it(`Tweak: ${testCase.comment}`, () => {
+    const tx = buildTxFromTweakVectorInputs(testCase.inputs);
+    const prevoutScripts = testCase.inputs.map((input) => hexToUint8Array(input.prevoutScript));
+
+    const pubkeys = SilentPayment.getEligiblePubkeysFromTransactionInputs(tx, prevoutScripts);
+    assert.deepStrictEqual(
+      pubkeys.map((pubkey) => uint8ArrayToHex(pubkey)),
+      testCase.expected.input_pub_keys
+    );
+
+    const sum = SilentPayment.sumPubKeys(pubkeys);
+    if (testCase.expected.input_pub_key_sum === null) {
+      assert.strictEqual(sum, null);
+    } else {
+      assert.strictEqual(uint8ArrayToHex(sum!), testCase.expected.input_pub_key_sum);
+    }
+
+    const tweak = SilentPayment.computeTweakForTx(tx, prevoutScripts);
+    if (testCase.expected.tweak === null) {
+      assert.strictEqual(tweak, null);
+    } else {
+      assert.strictEqual(uint8ArrayToHex(tweak!), testCase.expected.tweak);
+    }
   });
 });
 
@@ -246,87 +333,12 @@ it("can turn taproot address into pubkey", () => {
   assert.strictEqual(SilentPayment.addressToPubkey("bc1pgrhjjw52p6a03v635f7cnl6ttvuz9f34ujhaefm6xqtscd3m473szkl92g"), "40ef293a8a0ebaf8b351a27d89ff4b5b3822a635e4afdca77a30170c363bafa3");
 });
 
-it("can get pubkeys from Tx inputs", () => {
-  // txid 511e007f9c96b6d713a72b730506198f61dd96046edee72f0dc636bfe1f3a9cf
-  let tx = Transaction.fromHex(
-    "02000000000101e79e2690d05d3589257a5d1094de7f46bb1cfae3fc3fb3b644b790d4337931c5000000000001000000013226000000000000225120e92e6cb44492f87779999fbbc295540eef8a23f42efdebacac001ffa18074c100140692f4e81047496cd755c4a24b54ae36e74f7e303a265b1a9a643774d5699a6723cc66e9cdd395d2e487f7881a74bbb5740241498e70ede269583f862a3d47b4600000000"
-  );
-
-  const txPrevout0 = Transaction.fromHex(
-    "020000000001018f93f113a3d5f2d3feb7444ab8c8d7de5b2b2d1d9e9a5e2e2de42ad4b622958f0000000000000000800210270000000000002251203361aedbd209998e73f60ce0ea2245fa5c4ba747489c58eaa9222df401fda898ea140f000000000016001420c262ffbfe8be9744d502f421df8e1392f3231b02483045022100efaff08cc56bbe1a2819383ff95be23a6f6ab6acaf6bb75ccb7b1e462c62f1c202206fab1385f91ba4ae4fb7731944c8ebef501c7a16eafa320975cfb7697b8537ca012102fc490ee8b804b85d1b7d4959d0bd153ca5bc12fd82134aabbe96acb21b06a1ca00000000"
-  );
-
-  // important, need the locking script from previous transaction, and we put it in place of unlocking
-  // script so the util that parses pubkeys can find the pubkey
-  tx.ins[0].script = txPrevout0.outs[0].script;
-
-  assert.ok(SilentPayment.getPubkeysFromTransactionInputs(tx).length > 0); // element present
-  assert.strictEqual(uint8ArrayToHex(SilentPayment.getPubkeysFromTransactionInputs(tx)[0]), "3361aedbd209998e73f60ce0ea2245fa5c4ba747489c58eaa9222df401fda898");
-});
-
-it("can calculate tweak 1", () => {
-  // txid 511e007f9c96b6d713a72b730506198f61dd96046edee72f0dc636bfe1f3a9cf
+it("computeTweakForTx returns null without prevout scripts", () => {
   const tx = Transaction.fromHex(
     "02000000000101e79e2690d05d3589257a5d1094de7f46bb1cfae3fc3fb3b644b790d4337931c5000000000001000000013226000000000000225120e92e6cb44492f87779999fbbc295540eef8a23f42efdebacac001ffa18074c100140692f4e81047496cd755c4a24b54ae36e74f7e303a265b1a9a643774d5699a6723cc66e9cdd395d2e487f7881a74bbb5740241498e70ede269583f862a3d47b4600000000"
   );
 
-  const txPrevout0 = Transaction.fromHex(
-    "020000000001018f93f113a3d5f2d3feb7444ab8c8d7de5b2b2d1d9e9a5e2e2de42ad4b622958f0000000000000000800210270000000000002251203361aedbd209998e73f60ce0ea2245fa5c4ba747489c58eaa9222df401fda898ea140f000000000016001420c262ffbfe8be9744d502f421df8e1392f3231b02483045022100efaff08cc56bbe1a2819383ff95be23a6f6ab6acaf6bb75ccb7b1e462c62f1c202206fab1385f91ba4ae4fb7731944c8ebef501c7a16eafa320975cfb7697b8537ca012102fc490ee8b804b85d1b7d4959d0bd153ca5bc12fd82134aabbe96acb21b06a1ca00000000"
-  );
-
-  // important, need the locking script from previous transaction, and we put it in place of unlocking
-  // script so the util that parses pubkeys can find the pubkey
-  tx.ins[0].script = txPrevout0.outs[0].script;
-
-  const sum = SilentPayment.sumPubKeys(SilentPayment.getPubkeysFromTransactionInputs(tx));
-
-  assert.strictEqual(uint8ArrayToHex(sum), "023361aedbd209998e73f60ce0ea2245fa5c4ba747489c58eaa9222df401fda898");
-  assert.strictEqual(uint8ArrayToHex(SilentPayment.computeTweakForTx(tx)), "032698de13d4b56f9e5f884daa14eaa1978d599fc4cdcb092c36f15e7498172d64");
-});
-
-it("can not calculate tweak 1 when there is no script from prevout", () => {
-  // txid 511e007f9c96b6d713a72b730506198f61dd96046edee72f0dc636bfe1f3a9cf
-  const tx = Transaction.fromHex(
-    "02000000000101e79e2690d05d3589257a5d1094de7f46bb1cfae3fc3fb3b644b790d4337931c5000000000001000000013226000000000000225120e92e6cb44492f87779999fbbc295540eef8a23f42efdebacac001ffa18074c100140692f4e81047496cd755c4a24b54ae36e74f7e303a265b1a9a643774d5699a6723cc66e9cdd395d2e487f7881a74bbb5740241498e70ede269583f862a3d47b4600000000"
-  );
-
-  assert.throws(() => SilentPayment.computeTweakForTx(tx), /No pubkeys found/);
-});
-
-it("can calculate tweak 2", () => {
-  // 0002593785f4bd80373f36781a02bc9bf091387b1fa12b95811333d5aaab5172
-  const tx = Transaction.fromHex(
-    "02000000000102f48fb0ce46aacab0d4aa23307c49c21603c07dba03f319e19081e6398b3e890f0000000000fdffffffdcc539465c00b20610df99da5fedc69ff8690ba7b4f055de97c4a33d3998c4b00100000000fdffffff022202000000000000225120dc5eadea373119e9900ee61e5bff6b681857ac1ed8d8b4ba032a36a3635d93a2583e0f0000000000160014923861824628261ddbe226da37935b0186bb95b10247304402207dbd0692296fd0d176bd8e60a64d6269c3abf6d36d4381434739bc6cfaef9ac0022049198fb69c45022dcf69a3adb8924a1149f562699f85e6214e5064e809d89b57012103341b7b2c152d64c879d62f3c581b02cc688b67e08406c2223a4ed12bf678414a0247304402200dd830ad23a38b96baa151db91757a605fbea6df558ad82b79e1c33ec9a0acff022056470119bd3ef6a62c7d10fe3f9985c8c8ee585da0a4e275fa52abbf94db0281012103ab0f6573cdf40b2a0582565cb5628a46af9f102d568501b20c4ac9e33927fa7500000000"
-  );
-
-  assert.strictEqual(uint8ArrayToHex(SilentPayment.getPubkeysFromTransactionInputs(tx)[0]), "03341b7b2c152d64c879d62f3c581b02cc688b67e08406c2223a4ed12bf678414a");
-  assert.strictEqual(uint8ArrayToHex(SilentPayment.getPubkeysFromTransactionInputs(tx)[1]), "03ab0f6573cdf40b2a0582565cb5628a46af9f102d568501b20c4ac9e33927fa75");
-
-  const sum = SilentPayment.sumPubKeys(SilentPayment.getPubkeysFromTransactionInputs(tx));
-  assert.strictEqual(uint8ArrayToHex(sum), "0392cccfef96a8fbd21fad2bef9b5a78423f49c87a9b48d420ddc4401ba10f1ed4");
-
-  const tweak = SilentPayment.computeTweakForTx(tx);
-  assert.strictEqual(uint8ArrayToHex(tweak), "02101bd99f275e575712ad28c697488915f7087074c55a15320799f344f1e8fa5a");
-});
-
-it("can calculate tweak 3", () => {
-  // txid c0deeef514bc1bcb959e51a414db1dc107ef299d9b140d1a6d7f4efe5f3f50f9
-  let tx = Transaction.fromHex(
-    "02000000000101e79e2690d05d3589257a5d1094de7f46bb1cfae3fc3fb3b644b790d4337931c501000000000000008002102700000000000022512040fb1745d1c5f6d3f2b8825b83f6d90e74d6f278b0fe6d17e8173751e5bcaa4ab6ec0e00000000001600143adbcced77635b09bfe108295a8e39a73d1494b402483045022100d3f7a5edf1e592aae46499073eee7f93f63b1bda22bb83557918b42148128558022036a1dde48756f6d09dbf2ae884424d20985c6d8b05b5555eafd91d4de0b2238d0121033d484bbc02f16f0c5ada1fa14d8812e09e73cc8cf01ed9be3e78bda2322b778900000000"
-  );
-
-  assert.ok(SilentPayment.computeTweakForTx(tx));
-  assert.strictEqual(uint8ArrayToHex(SilentPayment.computeTweakForTx(tx)), "03363f3e1db6a545fc3a98ce6c55d7bdc288009109442d539c09ebc7a7cb515aa1");
-});
-
-it("can calculate tweak 4", () => {
-  // txid ba7597f306e32836ba0dae64f760b2cb3ec6e5b5681ca93af878e49342016c10 height 933626
-  let tx = Transaction.fromHex(
-    "020000000001016a300b3c3750c7aec50aa49fd22d090e1cdb77f9358e852cb0478aa8d35e500e0100000000000000800258020000000000002251203fd5ab8ef219b411bd410e457766ce11057a502e07537e60b44fd7d90836e0d8217c170000000000160014fbc1e7108754d800df0f5d33548b9fdc45274d490247304402207ac8a740eea404ed36c360402fd39e1e41ce1c15211a2d4fa2a82b264f0e5e26022045d55198c899b228964ad4a9c2242ec1be9127a31a856a47450e4cb3523bae790121039000152920443367f00c174c852b5fb3da5bffa47d4789d60535c28bc46ef93d00000000"
-  );
-
-  assert.ok(SilentPayment.computeTweakForTx(tx));
-  assert.strictEqual(uint8ArrayToHex(SilentPayment.computeTweakForTx(tx)), "02670bbd884161533aefd5248fbe8143e5084dba0a82229094a90377a75fd5cd15");
+  assert.strictEqual(SilentPayment.computeTweakForTx(tx, [new Uint8Array()]), null);
 });
 
 it("can create payment code out of BIP-39 seed", async () => {
@@ -553,7 +565,6 @@ it("createTransaction throws when private keys sum to zero", () => {
   ).toThrow("Sum of private keys is zero");
 });
 
-const K_MAX = 2323;
 const K_MAX_SP_A = "sp1qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqjuexzk6murw56suy3e0rd2cgqvycxttddwsvgxe2usfpxumr70xc9pkqwv";
 const K_MAX_SP_B = "sp1qqgrz6j0lcqnc04vxccydl0kpsj4frfje0ktmgcl2t346hkw30226xqupawdf48k8882j0strrvcmgg2kdawz53a54dd376ngdhak364hzcmynqtn";
 
@@ -563,13 +574,13 @@ function repeatSpTargets(address: string, n: number) {
 
 it("createTransaction throws when a recipient group exceeds K_max", () => {
   const sp = new SilentPayment();
-  expect(() => sp.createTransaction([], repeatSpTargets(K_MAX_SP_A, K_MAX + 1))).toThrow("Silent payment elements for a single recipient group exceed the limit of 2323");
+  expect(() => sp.createTransaction([], repeatSpTargets(K_MAX_SP_A, K_MAX + 1))).toThrow(`Silent payment elements for a single recipient group exceed the limit of ${K_MAX}`);
 });
 
 it("createTransaction rejects an oversize later group before summing keys", () => {
   const sp = new SilentPayment();
   const targets = [{ address: K_MAX_SP_B, value: 1 }, ...repeatSpTargets(K_MAX_SP_A, K_MAX + 1)];
-  expect(() => sp.createTransaction([], targets)).toThrow("Silent payment elements for a single recipient group exceed the limit of 2323");
+  expect(() => sp.createTransaction([], targets)).toThrow(`Silent payment elements for a single recipient group exceed the limit of ${K_MAX}`);
 });
 
 it("createTransaction allows a recipient group of exactly K_max", () => {

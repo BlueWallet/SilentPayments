@@ -2,11 +2,12 @@ import * as crypto from "crypto";
 import { ECPairFactory } from "ecpair";
 import { bech32m } from "bech32";
 import * as bitcoin from "bitcoinjs-lib";
-import { Stack, Transaction, script } from "bitcoinjs-lib";
+import { Transaction } from "bitcoinjs-lib";
 import { BIP32Factory } from "bip32";
 import * as bip39 from "bip39";
 
 import * as ecc from "tiny-secp256k1";
+import { getEligiblePubkeyFromInput, isValidScalar } from "./input-pubkeys";
 import { areUint8ArraysEqual, compareUint8Arrays, concatUint8Arrays, hexToUint8Array, uint8ArrayToHex } from "./uint8array-extras";
 
 const ECPair = ECPairFactory(ecc);
@@ -32,8 +33,8 @@ export type SilentPaymentGroup = {
   BmValues: Array<[Uint8Array, number | undefined, number]>;
 };
 
-// K_MAX defined by BIP0352
-const K_MAX = 2323;
+/** Per-group recipient limit defined by BIP-352. */
+export const K_MAX = 2323;
 
 export const G = hexToUint8Array("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798");
 
@@ -86,6 +87,9 @@ export class SilentPayment {
     const a = SilentPayment._sumPrivkeys(utxos);
     const A = new Uint8Array(ecc.pointFromScalar(a) as Uint8Array);
     const outpoint_hash = SilentPayment._outpointsHash(utxos, A);
+    if (!isValidScalar(outpoint_hash)) {
+      throw new Error("Invalid input hash");
+    }
 
     // Generating Pmk for each Bm in the group
     for (const group of silentPaymentGroups) {
@@ -96,6 +100,9 @@ export class SilentPayment {
       let k = 0;
       for (const [Bm, amount, i] of group.BmValues) {
         const tk = SilentPayment.taggedHash("BIP0352/SharedSecret", concatUint8Arrays([ecdh_shared_secret, SilentPayment._ser32(k)]));
+        if (!isValidScalar(tk)) {
+          throw new Error("Invalid shared secret tweak");
+        }
 
         // Let Pmk = tk·G + Bm
         const Pmk = new Uint8Array(ecc.pointAdd(ecc.pointMultiply(G, tk) as Uint8Array, Bm) as Uint8Array);
@@ -247,59 +254,40 @@ export class SilentPayment {
     return uint8ArrayToHex(bitcoin.address.toOutputScript(address).subarray(2));
   }
 
-  static getPubkeysFromTransactionInputs(tx: Transaction): Uint8Array[] {
+  /**
+   * Returns eligible input pubkeys for silent payments scanning, one per input when found.
+   * `prevoutScripts[i]` must be the spent output script for `tx.ins[i]`.
+   */
+  static getEligiblePubkeysFromTransactionInputs(tx: Transaction, prevoutScripts: Uint8Array[]): Uint8Array[] {
+    if (prevoutScripts.length !== tx.ins.length) {
+      throw new Error("prevoutScripts length must match transaction inputs length");
+    }
+
     const result: Uint8Array[] = [];
-
-    const stackToPubkeys = (stack: Stack): Uint8Array[] => {
-      return stack
-        .filter((elem) => typeof elem !== "number") // filtering out numbers, leaving only Uint8Array
-        .filter((elem) => ecc.isXOnlyPoint(elem as Uint8Array) || script.isCanonicalPubKey(elem as Uint8Array)) as Uint8Array[];
-    };
-
-    for (const input of tx.ins) {
-      const inScript = script.decompile(input.script);
-      if (inScript) {
-        // push any pubkeys in the scriptSig
-        result.push(...stackToPubkeys(inScript));
-        if (inScript.length > 1) {
-          const lastItem = inScript[inScript.length - 1];
-          if (typeof lastItem !== "number") {
-            // If the last item is a buffer, treat as redeemScript and check if we can decompile
-            // and if it has any pubkeys (it might not)
-            const redeemScript = script.decompile(lastItem);
-            if (redeemScript) {
-              result.push(...stackToPubkeys(redeemScript));
-            }
-          }
-        }
-      }
-      // Find any raw pubkeys in the witness stack
-      result.push(...input.witness.filter(script.isCanonicalPubKey));
-      for (const item of input.witness) {
-        const maybeScript = script.decompile(item);
-        if (maybeScript) {
-          result.push(...stackToPubkeys(maybeScript));
-        }
+    for (let i = 0; i < tx.ins.length; i++) {
+      const pubkey = getEligiblePubkeyFromInput(prevoutScripts[i], tx.ins[i].script, tx.ins[i].witness);
+      if (pubkey !== null) {
+        result.push(pubkey);
       }
     }
     return result;
   }
 
   /**
-   * takes decoded bitcoin transaction and computes tweak. some transactions must be augmented with prevout data
-   * so the method can successfully discover all pubkeys from inputs (example: `tx.ins[0].script = txPrevout0.outs[0].script;`)
+   * Computes the per-transaction tweak from a spending transaction and its input prevouts.
+   * Returns null when the transaction should be skipped (no eligible inputs or pubkey sum is infinity).
    */
-  static computeTweakForTx(tx: Transaction): Uint8Array | null {
-    // you need the sum of the (eligible) input public keys (call it A), multiplied by the input_hash, i.e,
-    // hash(A|smallest_outpoint). this is a public key (33bytes) so this 33 bytes per tx is sent to the client.
-    // that would be a tweak (per tx)
-    let A = SilentPayment.sumPubKeys(SilentPayment.getPubkeysFromTransactionInputs(tx));
-
-    if (A === null) {
-      throw new Error("No pubkeys found in transaction inputs");
+  static computeTweakForTx(tx: Transaction, prevoutScripts: Uint8Array[]): Uint8Array | null {
+    const pubkeys = SilentPayment.getEligiblePubkeysFromTransactionInputs(tx, prevoutScripts);
+    if (pubkeys.length === 0) {
+      return null;
     }
 
-    // looking for smallest outpoint:
+    const A = SilentPayment.sumPubKeys(pubkeys);
+    if (A === null) {
+      return null;
+    }
+
     const outpoints: Array<Uint8Array> = [];
     for (const inn of tx.ins) {
       const txidBuffer = inn.hash;
@@ -309,9 +297,12 @@ export class SilentPayment {
     outpoints.sort((a, b) => compareUint8Arrays(a, b));
     const smallest_outpoint = outpoints[0];
     const input_hash = SilentPayment.taggedHash("BIP0352/Inputs", concatUint8Arrays([smallest_outpoint, A]));
+    if (!isValidScalar(input_hash)) {
+      return null;
+    }
 
-    // finally, computing tweak:
-    return ecc.pointMultiply(A, input_hash);
+    const tweak = ecc.pointMultiply(A, input_hash);
+    return tweak ? new Uint8Array(tweak) : null;
   }
 
   static sumPubKeys(pubkeys: Uint8Array[], compressed: boolean = true): Uint8Array | null {
