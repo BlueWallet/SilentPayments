@@ -173,6 +173,41 @@ export class SilentPayment {
     return P_k.length === 33 ? P_k.subarray(1) : P_k;
   }
 
+  /**
+   * BIP-352 unlabeled scan: consecutive k starting at 0 until a gap or K_MAX.
+   * `taprootVoutsByPubkey` maps x-only output pubkey hex → vout.
+   */
+  private static _scanUnlabeledOutputs(
+    sharedSecret: Uint8Array,
+    Bspend: Uint8Array,
+    taprootVoutsByPubkey: Map<string, number>
+  ): Array<{ t_k: Uint8Array; vout: number }> {
+    const wallet: Array<{ t_k: Uint8Array; vout: number }> = [];
+    let k = 0;
+
+    while (k < K_MAX && wallet.length < taprootVoutsByPubkey.size) {
+      const t_k = SilentPayment._sharedSecretTweakAtK(sharedSecret, k);
+      if (t_k === null) {
+        break;
+      }
+
+      const outputXonly = SilentPayment._expectedOutputXonlyAtK(t_k, Bspend);
+      if (outputXonly === null) {
+        break;
+      }
+
+      const vout = taprootVoutsByPubkey.get(uint8ArrayToHex(outputXonly));
+      if (vout === undefined) {
+        break;
+      }
+
+      wallet.push({ t_k, vout });
+      k += 1;
+    }
+
+    return wallet;
+  }
+
   private static _privateMultiply(a: Uint8Array, b: Uint8Array): Uint8Array {
     if (a.length !== 32 || b.length !== 32) {
       throw new Error("Expected 32-byte scalars for private multiply");
@@ -408,76 +443,45 @@ export class SilentPayment {
     const ret: UTXO[] = [];
     const code = SilentPayment.seedToCode(seed);
     const sharedSecret = getSharedSecret(code.bscan, hexToUint8Array(tweakHex));
+    const found = SilentPayment._scanUnlabeledOutputs(sharedSecret, code.Bspend, SilentPayment._taprootVoutsByPubkey(tx));
+    const txid = tx.getId();
 
-    // todo: iterate k (aka label), cause it might be non-zero
-    const k = 0;
-    const t_k = SilentPayment._sharedSecretTweakAtK(sharedSecret, k);
-    if (t_k === null) {
-      return ret;
-    }
-
-    const outputXonly = SilentPayment._expectedOutputXonlyAtK(t_k, code.Bspend);
-    if (outputXonly === null) {
-      return ret;
-    }
-
-    const pubkeyHex = uint8ArrayToHex(outputXonly);
-
-    let vout = 0;
-    for (const o of tx.outs) {
-      if (uint8ArrayToHex(o.script) === "5120" + pubkeyHex) {
-        // match, that means this output is spendable by us;
-        // alternatively, could compare addresses: SilentPayment.pubkeyToAddress(pubkeyHex) === SilentPayment.pubkeyToAddress(o.script)
-
-        // deriving spending privkey for this utxo: d = b_spend + t_k (mod n)
-        const d = ecc.privateAdd(code.bspend, t_k);
-        if (!d) {
-          console.log("SilentPayment: Invalid private‐key tweak addition");
-          continue;
-        }
-
-        const keyPair = ECPair.fromPrivateKey(d);
-        const wif = keyPair.toWIF();
-
-        const u: UTXO = {
-          txid: tx.getId(),
-          vout,
-          wif,
-          utxoType: "p2tr",
-        };
-
-        ret.push(u);
+    for (const { t_k, vout } of found) {
+      const d = ecc.privateAdd(code.bspend, t_k);
+      if (!d) {
+        console.log("SilentPayment: Invalid private‐key tweak addition");
+        continue;
       }
-      vout++;
+
+      ret.push({
+        txid,
+        vout,
+        wif: ECPair.fromPrivateKey(d).toWIF(),
+        utxoType: "p2tr",
+      });
     }
 
     return ret;
   }
 
   static isOurUtxoUsingTweakbscanBspendAndOutputScript(outputScriptHex: string, tweakHex: string, bscan: string, Bspend: string) {
-    const sharedSecret = getSharedSecret(hexToUint8Array(bscan), hexToUint8Array(tweakHex));
-
-    // todo: iterate k (aka label), cause it might be non-zero
-    const k = 0;
-    const t_k = SilentPayment._sharedSecretTweakAtK(sharedSecret, k);
-    if (t_k === null) {
-      return false;
-    }
-
-    const outputXonly = SilentPayment._expectedOutputXonlyAtK(t_k, hexToUint8Array(Bspend));
-    if (outputXonly === null) {
-      return false;
-    }
-
-    return outputScriptHex === "5120" + uint8ArrayToHex(outputXonly);
+    return SilentPayment.isOurUtxoUsingTweakbscanBspendAndOutputScriptUint8array(
+      hexToUint8Array(outputScriptHex),
+      hexToUint8Array(tweakHex),
+      hexToUint8Array(bscan),
+      hexToUint8Array(Bspend)
+    );
   }
 
   static isOurUtxoUsingTweakbscanBspendAndOutputScriptUint8array(outputScript: Uint8Array, tweak: Uint8Array, bscan: Uint8Array, Bspend: Uint8Array) {
-    const sharedSecret = getSharedSecret(bscan, tweak);
+    if (outputScript.length !== 34 || outputScript[0] !== 0x51 || outputScript[1] !== 0x20) {
+      return false;
+    }
 
-    // todo: iterate k (aka label), cause it might be non-zero
-    const k = 0;
-    const t_k = SilentPayment._sharedSecretTweakAtK(sharedSecret, k);
+    // Isolated scripts can only be checked at k=0. k>0 exists only after k=0..k-1
+    // in the same transaction; use detectOurUtxos* for that sequential scan.
+    const sharedSecret = getSharedSecret(bscan, tweak);
+    const t_k = SilentPayment._sharedSecretTweakAtK(sharedSecret, 0);
     if (t_k === null) {
       return false;
     }
@@ -491,23 +495,27 @@ export class SilentPayment {
   }
 
   static detectOurUtxosUsingTweakbscanBspend(tx: Transaction, tweakHex: string, bscan: string, Bspend: string) {
-    const ret: Omit<UTXO, "wif">[] = [];
+    const sharedSecret = getSharedSecret(hexToUint8Array(bscan), hexToUint8Array(tweakHex));
+    const found = SilentPayment._scanUnlabeledOutputs(sharedSecret, hexToUint8Array(Bspend), SilentPayment._taprootVoutsByPubkey(tx));
+    const txid = tx.getId();
 
+    return found.map(({ vout }) => ({
+      txid,
+      vout,
+      utxoType: "p2tr" as const,
+    }));
+  }
+
+  private static _taprootVoutsByPubkey(tx: Transaction): Map<string, number> {
+    const taprootVoutsByPubkey = new Map<string, number>();
     let vout = 0;
     for (const o of tx.outs) {
-      if (SilentPayment.isOurUtxoUsingTweakbscanBspendAndOutputScript(uint8ArrayToHex(o.script), tweakHex, bscan, Bspend)) {
-        const u: Omit<UTXO, "wif"> = {
-          txid: tx.getId(),
-          vout,
-          utxoType: "p2tr",
-        };
-
-        ret.push(u);
+      if (o.script.length === 34 && o.script[0] === 0x51 && o.script[1] === 0x20) {
+        taprootVoutsByPubkey.set(uint8ArrayToHex(o.script.subarray(2)), vout);
       }
       vout++;
     }
-
-    return ret;
+    return taprootVoutsByPubkey;
   }
 }
 

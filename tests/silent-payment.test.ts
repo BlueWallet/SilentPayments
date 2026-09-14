@@ -2,10 +2,9 @@ import { ECPairFactory } from "ecpair";
 import assert from "node:assert";
 import { expect, it } from "vitest";
 import { Transaction } from "bitcoinjs-lib";
-import { G, K_MAX, SilentPayment, UTXOType } from "../src";
+import { K_MAX, SilentPayment, UTXOType } from "../src";
 import * as ecc from "tiny-secp256k1";
-import { concatUint8Arrays, hexToUint8Array, uint8ArrayToHex } from "../src/uint8array-extras";
-import { isValidScalar } from "../src/input-pubkeys";
+import { hexToUint8Array, uint8ArrayToHex } from "../src/uint8array-extras";
 import { Vin, getUTXOType } from "../tests/utils";
 import jsonInput from "./data/send_and_receive_test_vectors.json";
 import receivingVectors from "./data/receiving_test_vectors.json";
@@ -130,50 +129,9 @@ function sharedSecretFromTweak(bscan: Uint8Array, tweak: Uint8Array): Uint8Array
   return new Uint8Array(shared);
 }
 
-function expectedOutputXonlyAtK(sharedSecret: Uint8Array, Bspend: Uint8Array, k: number): Uint8Array | null {
-  const t_k = SilentPayment.taggedHash("BIP0352/SharedSecret", concatUint8Arrays([sharedSecret, SilentPayment._ser32(k)]));
-  if (!isValidScalar(t_k)) {
-    return null;
-  }
-
-  const tkG = ecc.pointMultiply(G, t_k);
-  if (!tkG) {
-    return null;
-  }
-
-  const P_k = ecc.pointAdd(tkG, Bspend);
-  if (!P_k) {
-    return null;
-  }
-
-  return P_k.length === 33 ? P_k.subarray(1) : P_k;
-}
-
-/** Unlabeled BIP-352 scan loop (k-loop lives in tests until production supports it). */
-function scanUnlabeledOutputs(tweakHex: string, bscan: string, Bspend: string, outputPubKeys: string[]): string[] {
-  const sharedSecret = sharedSecretFromTweak(hexToUint8Array(bscan), hexToUint8Array(tweakHex));
-  const BspendBytes = hexToUint8Array(Bspend);
-  const remaining = new Set(outputPubKeys);
-  const wallet: string[] = [];
-  let k = 0;
-
-  while (k < K_MAX && remaining.size > 0) {
-    const outputXonly = expectedOutputXonlyAtK(sharedSecret, BspendBytes, k);
-    if (outputXonly === null) {
-      break;
-    }
-
-    const outputPubKey = uint8ArrayToHex(outputXonly);
-    if (!remaining.has(outputPubKey)) {
-      break;
-    }
-
-    wallet.push(outputPubKey);
-    remaining.delete(outputPubKey);
-    k += 1;
-  }
-
-  return wallet;
+function scanUnlabeledOutputs(tx: Transaction, tweakHex: string, bscan: string, Bspend: string): string[] {
+  const detected = SilentPayment.detectOurUtxosUsingTweakbscanBspend(tx, tweakHex, bscan, Bspend);
+  return detected.map(({ vout }) => uint8ArrayToHex(tx.outs[vout].script.subarray(2)));
 }
 
 it("smoke test", () => {
@@ -279,20 +237,18 @@ tests.forEach((testCase, index) => {
     const sharedSecret = sharedSecretFromTweak(hexToUint8Array(testCase.bscan), tweak);
     assert.strictEqual(uint8ArrayToHex(sharedSecret), testCase.expected.shared_secret);
 
-    const foundPubKeys = scanUnlabeledOutputs(tweakHex, testCase.bscan, testCase.Bspend, testCase.outputPubKeys);
+    const foundPubKeys = scanUnlabeledOutputs(tx, tweakHex, testCase.bscan, testCase.Bspend);
     if (testCase.expected.found_count !== undefined) {
       assert.strictEqual(foundPubKeys.length, testCase.expected.found_count);
     } else {
       assert.deepStrictEqual([...foundPubKeys].sort(), [...testCase.expected.found_pub_keys].sort());
     }
 
-    // detectOurUtxosUsingTweakbscanBspend only checks k=0; verify it on single-hit cases.
-    if (testCase.expected.found_count === undefined && testCase.expected.found_pub_keys.length === 1) {
-      const detected = SilentPayment.detectOurUtxosUsingTweakbscanBspend(tx, tweakHex, testCase.bscan, testCase.Bspend);
-      assert.strictEqual(detected.length, 1);
-      const outputPubkey = uint8ArrayToHex(tx.outs[detected[0].vout].script.subarray(2));
-      assert.strictEqual(outputPubkey, testCase.expected.found_pub_keys[0]);
-    }
+    // A single output script can only be identified at k=0.
+    const isolatedHits = testCase.txOutputScripts.filter((script) =>
+      SilentPayment.isOurUtxoUsingTweakbscanBspendAndOutputScript(script, tweakHex, testCase.bscan, testCase.Bspend)
+    ).length;
+    assert.strictEqual(isolatedHits, foundPubKeys.length > 0 ? 1 : 0);
   });
 });
 
