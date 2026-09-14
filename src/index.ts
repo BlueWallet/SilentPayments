@@ -1,3 +1,4 @@
+// @ts-ignore runtime built-in (Node/Bun)
 import * as crypto from "crypto";
 import { ECPairFactory } from "ecpair";
 import { bech32m } from "bech32";

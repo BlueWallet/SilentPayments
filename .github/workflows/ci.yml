@@ -3,6 +3,27 @@ name: Tests
 on: pull_request
 
 jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck
+        run: npm run tslint
+
+      - name: Prettier
+        run: npm run prettier
+
   test-npm:
     name: Tests (npm)
     runs-on: ubuntu-latest

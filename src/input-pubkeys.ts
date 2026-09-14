@@ -1,3 +1,4 @@
+// @ts-ignore runtime built-in (Node/Bun)
 import * as crypto from "crypto";
 import { script } from "bitcoinjs-lib";
 import { areUint8ArraysEqual, concatUint8Arrays, hexToUint8Array } from "./uint8array-extras";
@@ -22,14 +23,7 @@ function isP2sh(spk: Uint8Array): boolean {
 }
 
 function isP2pkh(spk: Uint8Array): boolean {
-  return (
-    spk.length === 25 &&
-    spk[0] === 0x76 &&
-    spk[1] === 0xa9 &&
-    spk[2] === 0x14 &&
-    spk[spk.length - 2] === 0x88 &&
-    spk[spk.length - 1] === 0xac
-  );
+  return spk.length === 25 && spk[0] === 0x76 && spk[1] === 0xa9 && spk[2] === 0x14 && spk[spk.length - 2] === 0x88 && spk[spk.length - 1] === 0xac;
 }
 
 function witnessStackFromInputWitness(witness: Uint8Array[]): Uint8Array[] {
