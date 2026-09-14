@@ -29,12 +29,7 @@ function bytesToHex(bytes) {
 }
 
 function readUInt32LE(bytes, offset) {
-  return (
-    bytes[offset] |
-    (bytes[offset + 1] << 8) |
-    (bytes[offset + 2] << 16) |
-    (bytes[offset + 3] << 24)
-  );
+  return bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24);
 }
 
 function readUInt16LE(bytes, offset) {

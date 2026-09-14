@@ -81,9 +81,5 @@ function witnessFromHex(txinwitness: string): Uint8Array[] {
 }
 
 export function getUTXOType(vin: Vin): UTXOType {
-  return getSilentPaymentInputType(
-    hexToUint8Array(vin.prevout.scriptPubKey.hex),
-    hexToUint8Array(vin.scriptSig),
-    witnessFromHex(vin.txinwitness)
-  );
+  return getSilentPaymentInputType(hexToUint8Array(vin.prevout.scriptPubKey.hex), hexToUint8Array(vin.scriptSig), witnessFromHex(vin.txinwitness));
 }

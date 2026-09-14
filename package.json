@@ -5,6 +5,7 @@
   "main": "src/index.ts",
   "scripts": {
     "tslint": "tsc src/index.ts --noEmit --skipLibCheck --target esnext --moduleResolution nodenext --module NodeNext ",
+    "prettier": "prettier -c .",
     "lint:write": "prettier . --write",
     "test": "vitest run tests/",
     "generate:receiving-vectors": "node tests/scripts/generate-receiving-vectors.mjs"

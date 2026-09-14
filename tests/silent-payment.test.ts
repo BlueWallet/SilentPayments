@@ -23,12 +23,14 @@ function matchSubset(generated: string[], expected: string[][]): boolean {
   return expected.some((subArray) => exactMatch(generated, subArray));
 }
 
-type Recipient = string | {
-  address: string;
-  scan_pub_key?: string;
-  spend_pub_key?: string;
-  count?: number;
-};
+type Recipient =
+  | string
+  | {
+      address: string;
+      scan_pub_key?: string;
+      spend_pub_key?: string;
+      count?: number;
+    };
 
 type Given = {
   vin: Vin[];
@@ -688,9 +690,7 @@ it("createTransaction throws when private keys sum to zero", () => {
   const minusAB = ecc.privateNegate(ecc.privateAdd(ISSUE30_A, b) as Uint8Array);
 
   expect(() => sp.createTransaction([issue30P2wpkh(ISSUE30_A, 0), issue30P2wpkh(ISSUE30_MINUS_A, 1)], targets)).toThrow("Sum of private keys is zero");
-  expect(() =>
-    sp.createTransaction([issue30P2wpkh(ISSUE30_A, 0), issue30P2wpkh(b, 1), issue30P2wpkh(minusAB, 2)], targets)
-  ).toThrow("Sum of private keys is zero");
+  expect(() => sp.createTransaction([issue30P2wpkh(ISSUE30_A, 0), issue30P2wpkh(b, 1), issue30P2wpkh(minusAB, 2)], targets)).toThrow("Sum of private keys is zero");
 });
 
 const K_MAX_SP_A = "sp1qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqjuexzk6murw56suy3e0rd2cgqvycxttddwsvgxe2usfpxumr70xc9pkqwv";
