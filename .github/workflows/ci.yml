@@ -3,19 +3,38 @@ name: Tests
 on: pull_request
 
 jobs:
-  test:
+  test-npm:
+    name: Tests (npm)
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout project
-        uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v7
 
-      - name: Specify node version
-        uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
         with:
           node-version: 22
 
-      - name: Install node_modules
-        run: npm i
+      - name: Install dependencies
+        run: npm install
 
       - name: Run tests
         run: npm test
+
+  test-bun:
+    name: Tests (bun)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run tests
+        run: bun run test
