@@ -4,7 +4,7 @@
   "description": "SilentPayments (BIP-352) in pure typescript",
   "main": "src/index.ts",
   "scripts": {
-    "tslint": "tsc src/index.ts --noEmit --skipLibCheck --target esnext --moduleResolution nodenext --module NodeNext ",
+    "typecheck": "tsc src/index.ts --noEmit --skipLibCheck --target esnext --moduleResolution nodenext --module NodeNext",
     "prettier": "prettier -c .",
     "lint:write": "prettier . --write",
     "test": "vitest run tests/",
@@ -13,6 +13,7 @@
   "author": "overtorment",
   "license": "MIT",
   "dependencies": {
+    "bech32": "2.0.0",
     "bip32": "5.0.0",
     "bip39": "3.1.0",
     "bitcoinjs-lib": "7.0.0",
