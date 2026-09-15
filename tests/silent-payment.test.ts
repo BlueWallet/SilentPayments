@@ -1,4 +1,5 @@
 import { ECPairFactory } from "ecpair";
+import { bech32m } from "bech32";
 import assert from "node:assert";
 import { expect, it } from "vitest";
 import { Transaction } from "bitcoinjs-lib";
@@ -403,6 +404,11 @@ it("can validate payment code", () => {
   assert.ok(!SilentPayment.isPaymentCodeValid("sp2qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgq7c2zfthc6x3a5yecwc52nxa0kfd20xuz08zyrjpfw4l2j257yq6qgnkdh5")); // wrong prefix
   assert.ok(!SilentPayment.isPaymentCodeValid("qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqjuexzk6murw56suy3e0rd2cgqvycxttddwsvgxe2usfpxumr70xc9pkqwv")); // no prefix
   assert.ok(!SilentPayment.isPaymentCodeValid("qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqjuexzk6murw56suy3e0rd2cgqvycxttddwsvgxe2usfpxumr70xc9pkqwv123")); // no prefix
+
+  const shortPayload = bech32m.encode("sp", [0].concat(bech32m.toWords(new Uint8Array(10))), 1023);
+  const longPayload = bech32m.encode("sp", [0].concat(bech32m.toWords(new Uint8Array(67))), 1023);
+  assert.ok(!SilentPayment.isPaymentCodeValid(shortPayload));
+  assert.ok(!SilentPayment.isPaymentCodeValid(longPayload));
 });
 
 it("can turn pubkey into taproot address", () => {
@@ -452,6 +458,18 @@ it("can detect incoming payment in transaction using seed", async () => {
       utxoType: "p2tr",
     },
   ]);
+});
+
+it("detectOurUtxos uses seedToCode account and passphrase", async () => {
+  const seed = "vault hole thought beyond young winter common federal measure hobby gold better salmon fetch exhibit follow strong genius large group galaxy doll assist tip";
+  const tweak = "032698de13d4b56f9e5f884daa14eaa1978d599fc4cdcb092c36f15e7498172d64";
+  const tx = Transaction.fromHex(
+    "02000000000101e79e2690d05d3589257a5d1094de7f46bb1cfae3fc3fb3b644b790d4337931c5000000000001000000013226000000000000225120e92e6cb44492f87779999fbbc295540eef8a23f42efdebacac001ffa18074c100140692f4e81047496cd755c4a24b54ae36e74f7e303a265b1a9a643774d5699a6723cc66e9cdd395d2e487f7881a74bbb5740241498e70ede269583f862a3d47b4600000000"
+  );
+
+  assert.strictEqual(SilentPayment.detectOurUtxos(tx, seed, tweak, 1).length, 0);
+  assert.strictEqual(SilentPayment.detectOurUtxos(tx, seed, tweak, 0, "wrong").length, 0);
+  assert.strictEqual(SilentPayment.detectOurUtxos(tx, seed, tweak, 0, "").length, 1);
 });
 
 it("can detect incoming payment in transaction using tweak", async () => {
@@ -551,7 +569,7 @@ it("can detect incoming payment in tx output (having output script only)  using 
   assert.strictEqual(isOurs2, false);
 });
 
-it("can detect incoming payment in tx output (having output script only)  using tweak 3, plus time measure", async () => {
+it("can detect incoming payment in tx output (having output script only) using tweak 3", async () => {
   // txid ba7597f306e32836ba0dae64f760b2cb3ec6e5b5681ca93af878e49342016c10 height 933626
   const outputScriptHex = "51203fd5ab8ef219b411bd410e457766ce11057a502e07537e60b44fd7d90836e0d8";
   const tweak = "02670bbd884161533aefd5248fbe8143e5084dba0a82229094a90377a75fd5cd15";
@@ -559,17 +577,11 @@ it("can detect incoming payment in tx output (having output script only)  using 
   const bscan = "8ec7ee5936f993b57dcc4e182eea413136e2a897b76328ae3ca19eca7804b45d";
   const Bspend = "02a9a4b5ff061e3c07c3a4979cba003995376601bc4e45160cc4adf1227fd3c9f6";
 
-  const start = Date.now();
-  for (let c = 0; c < 1000; c++) {
-    const isOurs = SilentPayment.isOurUtxoUsingTweakbscanBspendAndOutputScript(outputScriptHex, tweak, bscan, Bspend);
-    assert.strictEqual(isOurs, true);
-  }
-  const end = Date.now();
-
-  console.log("1000 tweak mults took", (end - start) / 1000, "sec");
+  const isOurs = SilentPayment.isOurUtxoUsingTweakbscanBspendAndOutputScript(outputScriptHex, tweak, bscan, Bspend);
+  assert.strictEqual(isOurs, true);
 });
 
-it("can detect incoming payment in tx output (having output script only)  using tweak 3 v2, plus time measure", async () => {
+it("can detect incoming payment in tx output (having output script only) using tweak 3 v2", async () => {
   // txid ba7597f306e32836ba0dae64f760b2cb3ec6e5b5681ca93af878e49342016c10 height 933626
   const outputScript = hexToUint8Array("51203fd5ab8ef219b411bd410e457766ce11057a502e07537e60b44fd7d90836e0d8");
   const tweak = hexToUint8Array("02670bbd884161533aefd5248fbe8143e5084dba0a82229094a90377a75fd5cd15");
@@ -577,15 +589,8 @@ it("can detect incoming payment in tx output (having output script only)  using 
   const bscan = hexToUint8Array("8ec7ee5936f993b57dcc4e182eea413136e2a897b76328ae3ca19eca7804b45d");
   const Bspend = hexToUint8Array("02a9a4b5ff061e3c07c3a4979cba003995376601bc4e45160cc4adf1227fd3c9f6");
 
-  const start = Date.now();
-  let isOurs;
-  for (let c = 0; c < 1000; c++) {
-    isOurs = SilentPayment.isOurUtxoUsingTweakbscanBspendAndOutputScriptUint8array(outputScript, tweak, bscan, Bspend);
-  }
+  const isOurs = SilentPayment.isOurUtxoUsingTweakbscanBspendAndOutputScriptUint8array(outputScript, tweak, bscan, Bspend);
   assert.strictEqual(isOurs, true);
-  const end = Date.now();
-
-  console.log("1000 tweak mults took", (end - start) / 1000, "sec");
 });
 
 // Reporter scalars from BlueWallet/SilentPayments#30 (A + (-A) = 0 mod n).

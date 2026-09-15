@@ -91,7 +91,41 @@ in an actual transaction you create. Library will _not_ do coin selection for yo
 
 ### Receive
 
-TODO
+Scanning is a two-step job. First derive the per-transaction tweak from the spending transaction and the scripts it spent (`prevoutScripts[i]` is the script of `tx.ins[i]`). Returns `null` when the transaction should be skipped (no eligible inputs, or the pubkey sum is the identity).
+
+```typescript
+const tweak = SilentPayment.computeTweakForTx(tx, prevoutScripts);
+if (!tweak) {
+  // skip this transaction
+}
+const tweakHex = Buffer.from(tweak).toString("hex");
+```
+
+The tweak can also come from a tweak-indexing backend (same 33-byte compressed pubkey, hex-encoded). Then detect outputs that belong to you.
+
+With a BIP-39 seed (optional BIP-352 account index and passphrase; both default to account `0` and `""`):
+
+```typescript
+const utxos = SilentPayment.detectOurUtxos(tx, mnemonic, tweakHex);
+// or: SilentPayment.detectOurUtxos(tx, mnemonic, tweakHex, accountNum, passphrase)
+```
+
+Each result is a taproot UTXO with a WIF spend key (`b_spend + t_k`). Detection walks unlabeled `k = 0, 1, …` until a gap or `K_MAX`.
+
+If you already have `bscan` and `Bspend` (scan private key and spend public key as hex):
+
+```typescript
+const utxos = SilentPayment.detectOurUtxosUsingTweakbscanBspend(tx, tweakHex, bscanHex, BspendHex);
+```
+
+To check a single output script in isolation (only `k = 0`; later `k` need the full transaction via `detectOurUtxos*`):
+
+```typescript
+SilentPayment.isOurUtxoUsingTweakbscanBspendAndOutputScript(outputScriptHex, tweakHex, bscanHex, BspendHex);
+SilentPayment.isOurUtxoUsingTweakbscanBspendAndOutputScriptUint8array(outputScript, tweak, bscan, Bspend);
+```
+
+Labeled addresses (`m ≠ unlabeled B_spend`) are not scanned. `seedToCode` produces the unlabeled `sp1…` payment code plus the scan/spend keys used above.
 
 ## Development
 
