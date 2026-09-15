@@ -290,11 +290,11 @@ export class SilentPayment {
       if (version !== 0) {
         return false;
       }
+      // version 0 payload is B_scan || B_m (33 + 33 compressed pubkeys)
+      return bech32m.fromWords(result.words).length === 66;
     } catch (_) {
       return false;
     }
-
-    return true;
   }
 
   static pubkeyToAddress(hex: string): string {
@@ -435,9 +435,9 @@ export class SilentPayment {
    * that you own. tweak is _not_ calculated here because theoretically it can come from a tweak-indexing backend
    * service.
    */
-  static detectOurUtxos(tx: Transaction, seed: string, tweakHex: string) {
+  static detectOurUtxos(tx: Transaction, seed: string, tweakHex: string, accountNum = 0, passphrase = "") {
     const ret: UTXO[] = [];
-    const code = SilentPayment.seedToCode(seed);
+    const code = SilentPayment.seedToCode(seed, accountNum, passphrase);
     const sharedSecret = getSharedSecret(code.bscan, hexToUint8Array(tweakHex));
     const found = SilentPayment._scanUnlabeledOutputs(sharedSecret, code.Bspend, SilentPayment._taprootVoutsByPubkey(tx));
     const txid = tx.getId();
@@ -445,8 +445,7 @@ export class SilentPayment {
     for (const { t_k, vout } of found) {
       const d = ecc.privateAdd(code.bspend, t_k);
       if (!d) {
-        console.log("SilentPayment: Invalid private‐key tweak addition");
-        continue;
+        throw new Error("Invalid private-key tweak addition");
       }
 
       ret.push({
