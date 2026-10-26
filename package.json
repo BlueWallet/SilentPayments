@@ -15,10 +15,10 @@
   "dependencies": {
     "bech32": "2.0.0",
     "bip32": "5.0.0",
-    "bip39": "3.1.0",
-    "bitcoinjs-lib": "7.0.0",
+    "bip39": "3.1.2",
+    "bitcoinjs-lib": "7.0.5",
     "ecpair": "3.0.0",
-    "tiny-secp256k1": "^2.2.4"
+    "tiny-secp256k1": "^2.2.5"
   },
   "devDependencies": {
     "@tsconfig/recommended": "^1.0.2",
