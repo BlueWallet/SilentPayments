@@ -54,19 +54,12 @@ export class SilentPayment {
     const silentPaymentGroups: Array<SilentPaymentGroup> = [];
     for (let i = 0; i < targets.length; i++) {
       const target = targets[i];
-      if (!target.address?.startsWith("sp1")) {
+      if (!target.address?.toLowerCase().startsWith("sp1")) {
         ret[i] = target; // passthrough
         continue;
       }
 
-      const result = bech32m.decode(target.address, 118);
-      const version = result.words.shift();
-      if (version !== 0) {
-        throw new Error("Unexpected version of silent payment code");
-      }
-      const data = bech32m.fromWords(result.words);
-      const Bscan = new Uint8Array(data.slice(0, 33));
-      const Bm = new Uint8Array(data.slice(33));
+      const { Bscan, Bm } = SilentPayment.decodePaymentCode(target.address);
 
       // Addresses with the same Bscan key all belong to the same recipient
       const recipient = silentPaymentGroups.find((group) => compareUint8Arrays(group.Bscan, Bscan) === 0);
@@ -283,15 +276,38 @@ export class SilentPayment {
     return ret;
   }
 
+  /**
+   * Decodes and validates BIP-352 address, throws if invalid.
+   * Version 0 is exactly B_scan || B_m, versions 1-30 may append data which is ignored, version 31 is reserved.
+   */
+  static decodePaymentCode(pc: string): { Bscan: Uint8Array; Bm: Uint8Array } {
+    if (pc !== pc.toLowerCase() && pc !== pc.toUpperCase()) {
+      throw new Error("Mixed case silent payment code");
+    }
+    const result = bech32m.decode(pc.toLowerCase(), 1023);
+    if (result.prefix !== "sp") {
+      throw new Error("Unexpected prefix of silent payment code");
+    }
+    const version = result.words.shift();
+    if (version === undefined || version === 31) {
+      throw new Error("Unexpected version of silent payment code");
+    }
+    const data = new Uint8Array(bech32m.fromWords(result.words));
+    if (version === 0 ? data.length !== 66 : data.length < 66) {
+      throw new Error("Unexpected length of silent payment code");
+    }
+    const Bscan = data.slice(0, 33);
+    const Bm = data.slice(33, 66);
+    if (!ecc.isPoint(Bscan) || !ecc.isPoint(Bm)) {
+      throw new Error("Invalid public key in silent payment code");
+    }
+    return { Bscan, Bm };
+  }
+
   static isPaymentCodeValid(pc: string) {
     try {
-      const result = bech32m.decode(pc, 118);
-      const version = result.words.shift();
-      if (version !== 0) {
-        return false;
-      }
-      // version 0 payload is B_scan || B_m (33 + 33 compressed pubkeys)
-      return bech32m.fromWords(result.words).length === 66;
+      SilentPayment.decodePaymentCode(pc);
+      return true;
     } catch (_) {
       return false;
     }
