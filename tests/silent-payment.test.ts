@@ -411,6 +411,37 @@ it("can validate payment code", () => {
   assert.ok(!SilentPayment.isPaymentCodeValid(longPayload));
 });
 
+it("validates prefix, case, version and keys of payment code", () => {
+  const valid = "sp1qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqjuexzk6murw56suy3e0rd2cgqvycxttddwsvgxe2usfpxumr70xc9pkqwv";
+  const { Bscan, Bm } = SilentPayment.decodePaymentCode(valid);
+  const encode = (prefix: string, version: number, data: Uint8Array) => bech32m.encode(prefix, [version].concat(bech32m.toWords(data)), 1023);
+  const keys = new Uint8Array([...Bscan, ...Bm]);
+  const notOnCurve = new Uint8Array([2, ...new Array(32).fill(0xff)]);
+
+  assert.ok(SilentPayment.isPaymentCodeValid(valid.toUpperCase()));
+  assert.ok(!SilentPayment.isPaymentCodeValid(valid.slice(0, 10).toUpperCase() + valid.slice(10))); // mixed case
+  assert.ok(!SilentPayment.isPaymentCodeValid(encode("tsp", 0, keys)));
+  assert.ok(!SilentPayment.isPaymentCodeValid(encode("bc", 0, keys)));
+  assert.ok(!SilentPayment.isPaymentCodeValid(encode("sp", 0, new Uint8Array([...Bscan, ...notOnCurve]))));
+  assert.ok(!SilentPayment.isPaymentCodeValid(encode("sp", 0, new Uint8Array([...notOnCurve, ...Bm]))));
+
+  // future versions: first 66 bytes are B_scan || B_m, the rest is ignored
+  const v1 = encode("sp", 1, new Uint8Array([...keys, 1, 2, 3]));
+  assert.deepStrictEqual(SilentPayment.decodePaymentCode(v1), { Bscan, Bm });
+  assert.ok(!SilentPayment.isPaymentCodeValid(encode("sp", 1, Bscan)));
+  assert.ok(!SilentPayment.isPaymentCodeValid(encode("sp", 31, keys)));
+});
+
+it("createTransaction treats uppercase payment code same as lowercase", () => {
+  const sp = new SilentPayment();
+  const pc = "sp1qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqjuexzk6murw56suy3e0rd2cgqvycxttddwsvgxe2usfpxumr70xc9pkqwv";
+  const utxos = [{ txid: "a".repeat(64), vout: 0, wif: "L1uyy5qTuGrVXrmrsvHWHgVzW9kKdrp27wBC7Vs6nZDTF2BRUVwy", utxoType: "p2wpkh" as UTXOType }];
+  const lower = sp.createTransaction(utxos, [{ address: pc, value: 1000 }]);
+  const upper = sp.createTransaction(utxos, [{ address: pc.toUpperCase(), value: 1000 }]);
+  assert.ok(lower[0].address?.startsWith("bc1p"));
+  assert.deepStrictEqual(upper, lower);
+});
+
 it("can turn pubkey into taproot address", () => {
   assert.strictEqual(SilentPayment.pubkeyToAddress("40ef293a8a0ebaf8b351a27d89ff4b5b3822a635e4afdca77a30170c363bafa3"), "bc1pgrhjjw52p6a03v635f7cnl6ttvuz9f34ujhaefm6xqtscd3m473szkl92g");
 
