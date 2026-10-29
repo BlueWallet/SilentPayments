@@ -3,8 +3,8 @@ import { bech32m } from "bech32";
 import assert from "node:assert";
 import { expect, it } from "vitest";
 import { Transaction } from "bitcoinjs-lib";
-import { K_MAX, SilentPayment, UTXOType } from "../src";
-import * as ecc from "tiny-secp256k1";
+import { K_MAX, SPFactory, UTXOType } from "../src";
+import { ecc } from "./ecc";
 import { hexToUint8Array, uint8ArrayToHex } from "../src/uint8array-extras";
 import { Vin, getUTXOType } from "../tests/utils";
 import jsonInput from "./data/send_and_receive_test_vectors.json";
@@ -12,6 +12,7 @@ import receivingVectors from "./data/receiving_test_vectors.json";
 import tweakVectors from "./data/tweak_test_vectors.json";
 
 const ECPair = ECPairFactory(ecc);
+const SilentPayment = SPFactory(ecc);
 
 function exactMatch(a: string[], b: string[]): boolean {
   const sortedA = [...a].sort();
@@ -385,6 +386,14 @@ it("SilentPayment._outpointHash() works", () => {
   );
 });
 
+it("two SPFactory calls produce independent classes with identical output", () => {
+  const Other = SPFactory(ecc);
+  const utxos = [{ txid: "a".repeat(64), vout: 0, wif: "L1uyy5qTuGrVXrmrsvHWHgVzW9kKdrp27wBC7Vs6nZDTF2BRUVwy", utxoType: "p2wpkh" as UTXOType }];
+  const targets = [{ address: "sp1qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqjuexzk6murw56suy3e0rd2cgqvycxttddwsvgxe2usfpxumr70xc9pkqwv", value: 1000 }];
+  assert.notStrictEqual(Other, SilentPayment);
+  assert.deepStrictEqual(new Other().createTransaction(utxos, targets), new SilentPayment().createTransaction(utxos, targets));
+});
+
 it("SilentPayment._ser32() works", () => {
   assert.strictEqual(uint8ArrayToHex(SilentPayment._ser32(0)), "00000000");
   assert.strictEqual(uint8ArrayToHex(SilentPayment._ser32(1)), "00000001");
@@ -447,11 +456,13 @@ it("can turn pubkey into taproot address", () => {
 
   expect(() => {
     SilentPayment.pubkeyToAddress("512040ef293a8a0ebaf8b351a27d89ff4b5b3822a635e4afdca77a30170c363bafa3");
-  }).toThrow(/has no matching Address/);
+  }).toThrow("Expected 32 byte x-only pubkey");
 });
 
 it("can turn taproot address into pubkey", () => {
   assert.strictEqual(SilentPayment.addressToPubkey("bc1pgrhjjw52p6a03v635f7cnl6ttvuz9f34ujhaefm6xqtscd3m473szkl92g"), "40ef293a8a0ebaf8b351a27d89ff4b5b3822a635e4afdca77a30170c363bafa3");
+  expect(() => SilentPayment.addressToPubkey("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")).toThrow(); // p2wpkh is bech32, not bech32m
+  expect(() => SilentPayment.addressToPubkey("tb1pqqqqp399et2xygdj5xreqhjjvcmzhxw4aywxecjdzew6hylgvsesf3hn0c")).toThrow("Expected mainnet P2TR address"); // testnet
 });
 
 it("computeTweakForTx returns null without prevout scripts", () => {
@@ -719,4 +730,4 @@ it("createTransaction produces outputs for a recipient group of exactly K_max", 
   const generated = sp.createTransaction(utxos, repeatSpTargets(K_MAX_SP_A, K_MAX));
   assert.strictEqual(generated.length, K_MAX);
   assert.ok(generated.every((target) => target.address?.startsWith("bc1p")));
-});
+}, 120_000); // 2323 EC multiplications, ~10s with pure JS ECC on CI

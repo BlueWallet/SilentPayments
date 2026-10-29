@@ -47,6 +47,18 @@ If youre using webpack you might need to add a loader in `webpack.config.js`, so
 
 ## Usage
 
+Library does not ship an ECC implementation. Pass any [tiny-secp256k1](https://github.com/bitcoinjs/tiny-secp256k1) compatible
+one to the factory, same as `bitcoinjs-lib`, `bip32` and `ecpair` do (e.g. `tiny-secp256k1`, `@bitcoinerlab/secp256k1`, noble based shim for React Native):
+
+```typescript
+import * as ecc from "tiny-secp256k1";
+import { SPFactory } from "silent-payments";
+
+const SilentPayment = SPFactory(ecc);
+```
+
+Migrating from v3: replace `import { SilentPayment } from "silent-payments"` with the snippet above, everything else is unchanged.
+
 ### Send
 
 You must provide UTXOs and targets (which might or might not include SilentPayment codes):

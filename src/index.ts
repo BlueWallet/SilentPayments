@@ -2,18 +2,13 @@
 import * as crypto from "crypto";
 import { ECPairFactory } from "ecpair";
 import { bech32m } from "bech32";
-import * as bitcoin from "bitcoinjs-lib";
 import { Transaction } from "bitcoinjs-lib";
 import { BIP32Factory } from "bip32";
 import * as bip39 from "bip39";
 
-import * as ecc from "tiny-secp256k1";
+import type { TinySecp256k1Interface } from "./ecc";
 import { getEligiblePubkeyFromInput, isValidScalar, type SilentPaymentInputType } from "./input-pubkeys";
 import { areUint8ArraysEqual, compareUint8Arrays, concatUint8Arrays, hexToUint8Array, uint8ArrayToHex } from "./uint8array-extras";
-
-const ECPair = ECPairFactory(ecc);
-bitcoin.initEccLib(ecc);
-const bip32 = BIP32Factory(ecc);
 
 export type UTXOType = SilentPaymentInputType;
 
@@ -39,491 +34,520 @@ export const K_MAX = 2323;
 
 export const G = hexToUint8Array("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798");
 
-export class SilentPayment {
-  /**
-   * Takes the UTXO that the sender is going to spend in a transaction,
-   * and an array of Targets which may or may not have
-   * SilentPayment identifiers (destinations), and returns an array of
-   * Targets which have SilentPayment identifiers unwrapped into taproot addresses.
-   * If target initially already had onchain address its skipped.
-   * Numeric values (if present) for targets are passed through.
-   */
-  createTransaction(utxos: UTXO[], targets: Target[]): Target[] {
-    const ret: Target[] = new Array(targets.length);
+export function SPFactory(ecc: TinySecp256k1Interface) {
+  const ECPair = ECPairFactory(ecc);
+  const bip32 = BIP32Factory(ecc);
 
-    const silentPaymentGroups: Array<SilentPaymentGroup> = [];
-    for (let i = 0; i < targets.length; i++) {
-      const target = targets[i];
-      if (!target.address?.toLowerCase().startsWith("sp1")) {
-        ret[i] = target; // passthrough
-        continue;
+  function getSharedSecret(privateKey: Uint8Array, publicKey: Uint8Array): Uint8Array {
+    const shared = ecc.pointMultiply(publicKey, privateKey, true);
+    if (!shared) {
+      throw new Error("Failed to derive shared secret");
+    }
+
+    return shared;
+  }
+
+  class SilentPayment {
+    /**
+     * Takes the UTXO that the sender is going to spend in a transaction,
+     * and an array of Targets which may or may not have
+     * SilentPayment identifiers (destinations), and returns an array of
+     * Targets which have SilentPayment identifiers unwrapped into taproot addresses.
+     * If target initially already had onchain address its skipped.
+     * Numeric values (if present) for targets are passed through.
+     */
+    createTransaction(utxos: UTXO[], targets: Target[]): Target[] {
+      const ret: Target[] = new Array(targets.length);
+
+      const silentPaymentGroups: Array<SilentPaymentGroup> = [];
+      for (let i = 0; i < targets.length; i++) {
+        const target = targets[i];
+        if (!target.address?.toLowerCase().startsWith("sp1")) {
+          ret[i] = target; // passthrough
+          continue;
+        }
+
+        const { Bscan, Bm } = SilentPayment.decodePaymentCode(target.address);
+
+        // Addresses with the same Bscan key all belong to the same recipient
+        const recipient = silentPaymentGroups.find((group) => compareUint8Arrays(group.Bscan, Bscan) === 0);
+        if (recipient) {
+          recipient.BmValues.push([Bm, target.value, i]);
+        } else {
+          silentPaymentGroups.push({
+            Bscan: Bscan,
+            BmValues: [[Bm, target.value, i]],
+          });
+        }
+      }
+      if (silentPaymentGroups.length === 0) return ret; // passthrough
+
+      if (silentPaymentGroups.some((group) => group.BmValues.length > K_MAX)) {
+        throw new Error(`Silent payment elements for a single recipient group exceed the limit of ${K_MAX}`);
       }
 
-      const { Bscan, Bm } = SilentPayment.decodePaymentCode(target.address);
-
-      // Addresses with the same Bscan key all belong to the same recipient
-      const recipient = silentPaymentGroups.find((group) => compareUint8Arrays(group.Bscan, Bscan) === 0);
-      if (recipient) {
-        recipient.BmValues.push([Bm, target.value, i]);
-      } else {
-        silentPaymentGroups.push({
-          Bscan: Bscan,
-          BmValues: [[Bm, target.value, i]],
-        });
+      const a = SilentPayment._sumPrivkeys(utxos);
+      const A = new Uint8Array(ecc.pointFromScalar(a) as Uint8Array);
+      const outpoint_hash = SilentPayment._outpointsHash(utxos, A);
+      if (!isValidScalar(outpoint_hash)) {
+        throw new Error("Invalid input hash");
       }
+
+      // Generating Pmk for each Bm in the group
+      for (const group of silentPaymentGroups) {
+        // Bscan * a * outpoint_hash
+        const ecdh_shared_secret_step1 = SilentPayment._privateMultiply(outpoint_hash, a);
+        const ecdh_shared_secret = getSharedSecret(ecdh_shared_secret_step1, group.Bscan);
+
+        let k = 0;
+        for (const [Bm, amount, i] of group.BmValues) {
+          const tk = SilentPayment._sharedSecretTweakAtK(ecdh_shared_secret, k);
+          if (tk === null) {
+            throw new Error("Invalid shared secret tweak");
+          }
+
+          const outputXonly = SilentPayment._expectedOutputXonlyAtK(tk, Bm);
+          if (outputXonly === null) {
+            throw new Error("Invalid silent payment output key");
+          }
+
+          const address = SilentPayment.pubkeyToAddress(uint8ArrayToHex(outputXonly));
+          const newTarget: Target = { address };
+          newTarget.value = amount;
+          ret[i] = newTarget;
+          k += 1;
+        }
+      }
+      return ret;
     }
-    if (silentPaymentGroups.length === 0) return ret; // passthrough
 
-    if (silentPaymentGroups.some((group) => group.BmValues.length > K_MAX)) {
-      throw new Error(`Silent payment elements for a single recipient group exceed the limit of ${K_MAX}`);
+    static taggedHash(tag: "BIP0352/Inputs" | "BIP0352/SharedSecret", data: Uint8Array): Uint8Array {
+      const hash = crypto.createHash("sha256");
+      const tagHash = new Uint8Array(hash.update(tag, "utf-8").digest());
+      const ss = concatUint8Arrays([tagHash, tagHash, data]);
+      return new Uint8Array(crypto.createHash("sha256").update(ss).digest());
     }
 
-    const a = SilentPayment._sumPrivkeys(utxos);
-    const A = new Uint8Array(ecc.pointFromScalar(a) as Uint8Array);
-    const outpoint_hash = SilentPayment._outpointsHash(utxos, A);
-    if (!isValidScalar(outpoint_hash)) {
-      throw new Error("Invalid input hash");
+    static _outpointsHash(parameters: UTXO[], A: Uint8Array): Uint8Array {
+      const outpoints: Array<Uint8Array> = [];
+      for (const parameter of parameters) {
+        const txidBuffer = hexToUint8Array(parameter.txid).reverse();
+        const voutBuffer = new Uint8Array(SilentPayment._ser32(parameter.vout).reverse());
+        outpoints.push(new Uint8Array([...txidBuffer, ...voutBuffer]));
+      }
+      outpoints.sort((a, b) => compareUint8Arrays(a, b));
+      const smallest_outpoint = outpoints[0];
+      return SilentPayment.taggedHash("BIP0352/Inputs", concatUint8Arrays([smallest_outpoint, A]));
     }
 
-    // Generating Pmk for each Bm in the group
-    for (const group of silentPaymentGroups) {
-      // Bscan * a * outpoint_hash
-      const ecdh_shared_secret_step1 = SilentPayment._privateMultiply(outpoint_hash, a);
-      const ecdh_shared_secret = getSharedSecret(ecdh_shared_secret_step1, group.Bscan);
+    /**
+     * Serializes a 32-bit unsigned integer i as a 4-byte big-endian
+     * @param i {number} The number to serialize
+     * @returns {Uint8Array} The serialized number
+     * @private
+     * */
+    static _ser32(i: number): Uint8Array {
+      const returnValue = new Uint8Array(4);
+      returnValue[0] = (i >> 24) & 0xff;
+      returnValue[1] = (i >> 16) & 0xff;
+      returnValue[2] = (i >> 8) & 0xff;
+      returnValue[3] = i & 0xff;
+      return returnValue;
+    }
 
+    static _sharedSecretTweakAtK(sharedSecret: Uint8Array, k: number): Uint8Array | null {
+      const t_k = SilentPayment.taggedHash("BIP0352/SharedSecret", concatUint8Arrays([sharedSecret, SilentPayment._ser32(k)]));
+      return isValidScalar(t_k) ? t_k : null;
+    }
+
+    static _expectedOutputXonlyAtK(t_k: Uint8Array, Bm: Uint8Array): Uint8Array | null {
+      const tkG = ecc.pointMultiply(G, t_k);
+      if (!tkG) {
+        return null;
+      }
+
+      const P_k = ecc.pointAdd(tkG, Bm);
+      if (!P_k) {
+        return null;
+      }
+
+      return P_k.length === 33 ? P_k.subarray(1) : P_k;
+    }
+
+    /**
+     * BIP-352 unlabeled scan: consecutive k starting at 0 until a gap or K_MAX.
+     * `taprootVoutsByPubkey` maps x-only output pubkey hex → vout.
+     */
+    static _scanUnlabeledOutputs(sharedSecret: Uint8Array, Bspend: Uint8Array, taprootVoutsByPubkey: Map<string, number>): Array<{ t_k: Uint8Array; vout: number }> {
+      const wallet: Array<{ t_k: Uint8Array; vout: number }> = [];
       let k = 0;
-      for (const [Bm, amount, i] of group.BmValues) {
-        const tk = SilentPayment._sharedSecretTweakAtK(ecdh_shared_secret, k);
-        if (tk === null) {
-          throw new Error("Invalid shared secret tweak");
+
+      while (k < K_MAX && wallet.length < taprootVoutsByPubkey.size) {
+        const t_k = SilentPayment._sharedSecretTweakAtK(sharedSecret, k);
+        if (t_k === null) {
+          break;
         }
 
-        const outputXonly = SilentPayment._expectedOutputXonlyAtK(tk, Bm);
+        const outputXonly = SilentPayment._expectedOutputXonlyAtK(t_k, Bspend);
         if (outputXonly === null) {
-          throw new Error("Invalid silent payment output key");
+          break;
         }
 
-        const address = SilentPayment.pubkeyToAddress(uint8ArrayToHex(outputXonly));
-        const newTarget: Target = { address };
-        newTarget.value = amount;
-        ret[i] = newTarget;
+        const vout = taprootVoutsByPubkey.get(uint8ArrayToHex(outputXonly));
+        if (vout === undefined) {
+          break;
+        }
+
+        wallet.push({ t_k, vout });
         k += 1;
       }
-    }
-    return ret;
-  }
 
-  static taggedHash(tag: "BIP0352/Inputs" | "BIP0352/SharedSecret", data: Uint8Array): Uint8Array {
-    const hash = crypto.createHash("sha256");
-    const tagHash = new Uint8Array(hash.update(tag, "utf-8").digest());
-    const ss = concatUint8Arrays([tagHash, tagHash, data]);
-    return new Uint8Array(crypto.createHash("sha256").update(ss).digest());
-  }
-
-  static _outpointsHash(parameters: UTXO[], A: Uint8Array): Uint8Array {
-    const outpoints: Array<Uint8Array> = [];
-    for (const parameter of parameters) {
-      const txidBuffer = hexToUint8Array(parameter.txid).reverse();
-      const voutBuffer = new Uint8Array(SilentPayment._ser32(parameter.vout).reverse());
-      outpoints.push(new Uint8Array([...txidBuffer, ...voutBuffer]));
-    }
-    outpoints.sort((a, b) => compareUint8Arrays(a, b));
-    const smallest_outpoint = outpoints[0];
-    return SilentPayment.taggedHash("BIP0352/Inputs", concatUint8Arrays([smallest_outpoint, A]));
-  }
-
-  /**
-   * Serializes a 32-bit unsigned integer i as a 4-byte big-endian
-   * @param i {number} The number to serialize
-   * @returns {Uint8Array} The serialized number
-   * @private
-   * */
-  static _ser32(i: number): Uint8Array {
-    const returnValue = new Uint8Array(4);
-    returnValue[0] = (i >> 24) & 0xff;
-    returnValue[1] = (i >> 16) & 0xff;
-    returnValue[2] = (i >> 8) & 0xff;
-    returnValue[3] = i & 0xff;
-    return returnValue;
-  }
-
-  private static _sharedSecretTweakAtK(sharedSecret: Uint8Array, k: number): Uint8Array | null {
-    const t_k = SilentPayment.taggedHash("BIP0352/SharedSecret", concatUint8Arrays([sharedSecret, SilentPayment._ser32(k)]));
-    return isValidScalar(t_k) ? t_k : null;
-  }
-
-  private static _expectedOutputXonlyAtK(t_k: Uint8Array, Bm: Uint8Array): Uint8Array | null {
-    const tkG = ecc.pointMultiply(G, t_k);
-    if (!tkG) {
-      return null;
+      return wallet;
     }
 
-    const P_k = ecc.pointAdd(tkG, Bm);
-    if (!P_k) {
-      return null;
+    static _privateMultiply(a: Uint8Array, b: Uint8Array): Uint8Array {
+      if (a.length !== 32 || b.length !== 32) {
+        throw new Error("Expected 32-byte scalars for private multiply");
+      }
+
+      const product = (bytesToBigInt(a) * bytesToBigInt(b)) % SECP256K1_N;
+      if (product === BigInt(0)) {
+        throw new Error("Invalid private multiply result");
+      }
+
+      return bigIntTo32Bytes(product);
     }
 
-    return P_k.length === 33 ? P_k.subarray(1) : P_k;
-  }
+    /**
+     * Sums the private keys of the UTXOs
+     * @param utxos {UTXO[]}
+     * @returns {Uint8Array} The sum of the private keys
+     * @private
+     **/
+    static _sumPrivkeys(utxos: UTXO[]): Uint8Array {
+      if (utxos.length === 0) {
+        throw new Error("No UTXOs provided");
+      }
 
-  /**
-   * BIP-352 unlabeled scan: consecutive k starting at 0 until a gap or K_MAX.
-   * `taprootVoutsByPubkey` maps x-only output pubkey hex → vout.
-   */
-  private static _scanUnlabeledOutputs(sharedSecret: Uint8Array, Bspend: Uint8Array, taprootVoutsByPubkey: Map<string, number>): Array<{ t_k: Uint8Array; vout: number }> {
-    const wallet: Array<{ t_k: Uint8Array; vout: number }> = [];
-    let k = 0;
+      const keys: Array<Uint8Array> = [];
+      for (const utxo of utxos) {
+        let key = ECPair.fromWIF(utxo.wif).privateKey!;
+        switch (utxo.utxoType) {
+          case "non-eligible":
+            // Non-eligible UTXOs can be spent in the transaction, but are not used for the
+            // shared secret derivation. Note: we don't check that the private key is valid
+            // for non-eligible utxos because its possible the sender is following a different
+            // signing protocol for these utxos. For silent payments eligible utxos, we require
+            // access to the private key.
+            break;
+          case "p2tr":
+            if (key === undefined) {
+              throw new Error("No private key found for eligible UTXO");
+            }
 
-    while (k < K_MAX && wallet.length < taprootVoutsByPubkey.size) {
-      const t_k = SilentPayment._sharedSecretTweakAtK(sharedSecret, k);
+            // For taproot, check if the seckey results in an odd y-value and negate if so
+            if (ecc.pointFromScalar(key)![0] === 0x03) {
+              key = new Uint8Array(ecc.privateNegate(key));
+            }
+            keys.push(key);
+            break;
+          case "p2wpkh":
+          case "p2sh-p2wpkh":
+          case "p2pkh":
+            if (key === undefined) {
+              throw new Error("No private key found for eligible UTXO");
+            }
+            keys.push(key);
+            break;
+        }
+      }
+
+      if (keys.length === 0) {
+        throw new Error("No eligible UTXOs with private keys found");
+      }
+
+      // Sum scalars left-to-right. tiny-secp256k1 privateAdd returns null for the
+      // zero scalar (identity), which is a valid intermediate when keys cancel.
+      let ret: Uint8Array | null = keys[0];
+      for (let i = 1; i < keys.length; i++) {
+        if (ret === null) {
+          ret = keys[i];
+          continue;
+        }
+        const sum = ecc.privateAdd(ret, keys[i]);
+        ret = sum === null ? null : new Uint8Array(sum);
+      }
+
+      if (ret === null) {
+        throw new Error("Sum of private keys is zero");
+      }
+      return ret;
+    }
+
+    /**
+     * Decodes and validates BIP-352 address, throws if invalid.
+     * Version 0 is exactly B_scan || B_m, versions 1-30 may append data which is ignored, version 31 is reserved.
+     */
+    static decodePaymentCode(pc: string): { Bscan: Uint8Array; Bm: Uint8Array } {
+      if (pc !== pc.toLowerCase() && pc !== pc.toUpperCase()) {
+        throw new Error("Mixed case silent payment code");
+      }
+      const result = bech32m.decode(pc.toLowerCase(), 1023);
+      if (result.prefix !== "sp") {
+        throw new Error("Unexpected prefix of silent payment code");
+      }
+      const version = result.words.shift();
+      if (version === undefined || version === 31) {
+        throw new Error("Unexpected version of silent payment code");
+      }
+      const data = new Uint8Array(bech32m.fromWords(result.words));
+      if (version === 0 ? data.length !== 66 : data.length < 66) {
+        throw new Error("Unexpected length of silent payment code");
+      }
+      const Bscan = data.slice(0, 33);
+      const Bm = data.slice(33, 66);
+      if (!ecc.isPoint(Bscan) || !ecc.isPoint(Bm)) {
+        throw new Error("Invalid public key in silent payment code");
+      }
+      return { Bscan, Bm };
+    }
+
+    static isPaymentCodeValid(pc: string) {
+      try {
+        SilentPayment.decodePaymentCode(pc);
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    /** x-only pubkey hex -> mainnet P2TR address. Done with bech32m directly so no bitcoinjs initEccLib is needed. */
+    static pubkeyToAddress(hex: string): string {
+      const publicKey = hexToUint8Array(hex);
+      if (publicKey.length !== 32) {
+        throw new Error("Expected 32 byte x-only pubkey");
+      }
+      return bech32m.encode("bc", [1, ...bech32m.toWords(publicKey)]);
+    }
+
+    /** mainnet P2TR address -> x-only pubkey hex */
+    static addressToPubkey(address: string): string {
+      const { prefix, words } = bech32m.decode(address);
+      const data = bech32m.fromWords(words.slice(1));
+      if (prefix !== "bc" || words[0] !== 1 || data.length !== 32) {
+        throw new Error("Expected mainnet P2TR address");
+      }
+      return uint8ArrayToHex(new Uint8Array(data));
+    }
+
+    /**
+     * Returns eligible input pubkeys for silent payments scanning, one per input when found.
+     * `prevoutScripts[i]` must be the spent output script for `tx.ins[i]`.
+     */
+    static getEligiblePubkeysFromTransactionInputs(tx: Transaction, prevoutScripts: Uint8Array[]): Uint8Array[] {
+      if (prevoutScripts.length !== tx.ins.length) {
+        throw new Error("prevoutScripts length must match transaction inputs length");
+      }
+
+      const result: Uint8Array[] = [];
+      for (let i = 0; i < tx.ins.length; i++) {
+        const pubkey = getEligiblePubkeyFromInput(prevoutScripts[i], tx.ins[i].script, tx.ins[i].witness);
+        if (pubkey !== null) {
+          result.push(pubkey);
+        }
+      }
+      return result;
+    }
+
+    /**
+     * Computes the per-transaction tweak from a spending transaction and its input prevouts.
+     * Returns null when the transaction should be skipped (no eligible inputs or pubkey sum is infinity).
+     */
+    static computeTweakForTx(tx: Transaction, prevoutScripts: Uint8Array[]): Uint8Array | null {
+      const pubkeys = SilentPayment.getEligiblePubkeysFromTransactionInputs(tx, prevoutScripts);
+      if (pubkeys.length === 0) {
+        return null;
+      }
+
+      const A = SilentPayment.sumPubKeys(pubkeys);
+      if (A === null) {
+        return null;
+      }
+
+      const outpoints: Array<Uint8Array> = [];
+      for (const inn of tx.ins) {
+        const txidBuffer = inn.hash;
+        const voutBuffer = new Uint8Array(SilentPayment._ser32(inn.index).reverse());
+        outpoints.push(new Uint8Array([...txidBuffer, ...voutBuffer]));
+      }
+      outpoints.sort((a, b) => compareUint8Arrays(a, b));
+      const smallest_outpoint = outpoints[0];
+      const input_hash = SilentPayment.taggedHash("BIP0352/Inputs", concatUint8Arrays([smallest_outpoint, A]));
+      if (!isValidScalar(input_hash)) {
+        return null;
+      }
+
+      const tweak = ecc.pointMultiply(A, input_hash);
+      return tweak ? new Uint8Array(tweak) : null;
+    }
+
+    static sumPubKeys(pubkeys: Uint8Array[], compressed: boolean = true): Uint8Array | null {
+      if (pubkeys.length === 0) return null;
+
+      let result = pubkeys[0];
+      let atIdentity = false;
+      for (let i = 1; i < pubkeys.length; i++) {
+        if (atIdentity) {
+          result = pubkeys[i];
+          atIdentity = false;
+          continue;
+        }
+        const sum = ecc.pointAdd(result, pubkeys[i], compressed);
+        if (!sum) {
+          // Valid opposite points sum to infinity. Keep going; only the final
+          // sum being identity is a failure. Invalid points still fail.
+          if (ecc.isPoint(result) && ecc.isPoint(pubkeys[i])) {
+            atIdentity = true;
+            continue;
+          }
+          return null;
+        }
+        result = sum;
+      }
+
+      if (atIdentity) return null;
+      if (result!.length === 32) {
+        // We have an x-only point, need to determine correct parity
+        // Use the pointCompress function to get the proper compressed format
+        try {
+          // Create a temporary compressed point by trying both parities
+          // First try even parity (0x02)
+          const evenPoint = concatUint8Arrays([new Uint8Array([2]), result]);
+          if (ecc.isPoint(evenPoint)) {
+            return ecc.pointCompress(evenPoint, compressed);
+          }
+
+          // If even doesn't work, try odd parity (0x03)
+          const oddPoint = concatUint8Arrays([new Uint8Array([3]), result]);
+          if (ecc.isPoint(oddPoint)) {
+            return ecc.pointCompress(oddPoint, compressed);
+          }
+
+          return null;
+        } catch {
+          return null;
+        }
+      }
+
+      return result;
+    }
+
+    /**
+     * takes BIP-39 mnemonic seed and returns shareable static payment code; also: Bscan, bscan, Bspend, bspend
+     */
+    static seedToCode(bip39seed: string, accountNum = 0, passphrase = ""): { address: string; Bscan: Uint8Array; bscan: Uint8Array; Bspend: Uint8Array; bspend: Uint8Array } {
+      const root = bip32.fromSeed(new Uint8Array(bip39.mnemonicToSeedSync(bip39seed, passphrase)));
+      const scanXprv = root.derivePath(`m/352'/0'/${accountNum}'/1'/0`);
+      const spendXprv = root.derivePath(`m/352'/0'/${accountNum}'/0'/0`);
+      const Bscan = scanXprv.publicKey;
+      const bscan = scanXprv.privateKey;
+      const Bspend = spendXprv.publicKey;
+      const bspend = spendXprv.privateKey;
+
+      assert(bscan, "could not derive bscan from seed");
+      assert(bspend, "could not derive bspend from seed");
+
+      const bech32Version = 0;
+      const words = [bech32Version].concat(bech32m.toWords(concatUint8Arrays([Bscan, Bspend])));
+      const address = bech32m.encode("sp", words, 1023);
+      return { address, Bscan, bscan, Bspend, bspend };
+    }
+
+    /**
+     * takes a decoded transaction (`bitcoinjs.Transaction.fromHex()` will do fine),
+     * takes computed tweak for this transaction, your mnemonic seed, and gives you UTXOs from this transaction
+     * that you own. tweak is _not_ calculated here because theoretically it can come from a tweak-indexing backend
+     * service.
+     */
+    static detectOurUtxos(tx: Transaction, seed: string, tweakHex: string, accountNum = 0, passphrase = "") {
+      const ret: UTXO[] = [];
+      const code = SilentPayment.seedToCode(seed, accountNum, passphrase);
+      const sharedSecret = getSharedSecret(code.bscan, hexToUint8Array(tweakHex));
+      const found = SilentPayment._scanUnlabeledOutputs(sharedSecret, code.Bspend, SilentPayment._taprootVoutsByPubkey(tx));
+      const txid = tx.getId();
+
+      for (const { t_k, vout } of found) {
+        const d = ecc.privateAdd(code.bspend, t_k);
+        if (!d) {
+          throw new Error("Invalid private-key tweak addition");
+        }
+
+        ret.push({
+          txid,
+          vout,
+          wif: ECPair.fromPrivateKey(d).toWIF(),
+          utxoType: "p2tr",
+        });
+      }
+
+      return ret;
+    }
+
+    static isOurUtxoUsingTweakbscanBspendAndOutputScript(outputScriptHex: string, tweakHex: string, bscan: string, Bspend: string) {
+      return SilentPayment.isOurUtxoUsingTweakbscanBspendAndOutputScriptUint8array(hexToUint8Array(outputScriptHex), hexToUint8Array(tweakHex), hexToUint8Array(bscan), hexToUint8Array(Bspend));
+    }
+
+    static isOurUtxoUsingTweakbscanBspendAndOutputScriptUint8array(outputScript: Uint8Array, tweak: Uint8Array, bscan: Uint8Array, Bspend: Uint8Array) {
+      if (outputScript.length !== 34 || outputScript[0] !== 0x51 || outputScript[1] !== 0x20) {
+        return false;
+      }
+
+      // Isolated scripts can only be checked at k=0. k>0 exists only after k=0..k-1
+      // in the same transaction; use detectOurUtxos* for that sequential scan.
+      const sharedSecret = getSharedSecret(bscan, tweak);
+      const t_k = SilentPayment._sharedSecretTweakAtK(sharedSecret, 0);
       if (t_k === null) {
-        break;
+        return false;
       }
 
       const outputXonly = SilentPayment._expectedOutputXonlyAtK(t_k, Bspend);
       if (outputXonly === null) {
-        break;
+        return false;
       }
 
-      const vout = taprootVoutsByPubkey.get(uint8ArrayToHex(outputXonly));
-      if (vout === undefined) {
-        break;
-      }
-
-      wallet.push({ t_k, vout });
-      k += 1;
+      return areUint8ArraysEqual(outputScript.subarray(2), outputXonly);
     }
 
-    return wallet;
-  }
+    static detectOurUtxosUsingTweakbscanBspend(tx: Transaction, tweakHex: string, bscan: string, Bspend: string) {
+      const sharedSecret = getSharedSecret(hexToUint8Array(bscan), hexToUint8Array(tweakHex));
+      const found = SilentPayment._scanUnlabeledOutputs(sharedSecret, hexToUint8Array(Bspend), SilentPayment._taprootVoutsByPubkey(tx));
+      const txid = tx.getId();
 
-  private static _privateMultiply(a: Uint8Array, b: Uint8Array): Uint8Array {
-    if (a.length !== 32 || b.length !== 32) {
-      throw new Error("Expected 32-byte scalars for private multiply");
-    }
-
-    const product = (bytesToBigInt(a) * bytesToBigInt(b)) % SECP256K1_N;
-    if (product === BigInt(0)) {
-      throw new Error("Invalid private multiply result");
-    }
-
-    return bigIntTo32Bytes(product);
-  }
-
-  /**
-   * Sums the private keys of the UTXOs
-   * @param utxos {UTXO[]}
-   * @returns {Uint8Array} The sum of the private keys
-   * @private
-   **/
-  private static _sumPrivkeys(utxos: UTXO[]): Uint8Array {
-    if (utxos.length === 0) {
-      throw new Error("No UTXOs provided");
-    }
-
-    const keys: Array<Uint8Array> = [];
-    for (const utxo of utxos) {
-      let key = ECPair.fromWIF(utxo.wif).privateKey!;
-      switch (utxo.utxoType) {
-        case "non-eligible":
-          // Non-eligible UTXOs can be spent in the transaction, but are not used for the
-          // shared secret derivation. Note: we don't check that the private key is valid
-          // for non-eligible utxos because its possible the sender is following a different
-          // signing protocol for these utxos. For silent payments eligible utxos, we require
-          // access to the private key.
-          break;
-        case "p2tr":
-          if (key === undefined) {
-            throw new Error("No private key found for eligible UTXO");
-          }
-
-          // For taproot, check if the seckey results in an odd y-value and negate if so
-          if (ecc.pointFromScalar(key)![0] === 0x03) {
-            key = new Uint8Array(ecc.privateNegate(key));
-          }
-          keys.push(key);
-          break;
-        case "p2wpkh":
-        case "p2sh-p2wpkh":
-        case "p2pkh":
-          if (key === undefined) {
-            throw new Error("No private key found for eligible UTXO");
-          }
-          keys.push(key);
-          break;
-      }
-    }
-
-    if (keys.length === 0) {
-      throw new Error("No eligible UTXOs with private keys found");
-    }
-
-    // Sum scalars left-to-right. tiny-secp256k1 privateAdd returns null for the
-    // zero scalar (identity), which is a valid intermediate when keys cancel.
-    let ret: Uint8Array | null = keys[0];
-    for (let i = 1; i < keys.length; i++) {
-      if (ret === null) {
-        ret = keys[i];
-        continue;
-      }
-      const sum = ecc.privateAdd(ret, keys[i]);
-      ret = sum === null ? null : new Uint8Array(sum);
-    }
-
-    if (ret === null) {
-      throw new Error("Sum of private keys is zero");
-    }
-    return ret;
-  }
-
-  /**
-   * Decodes and validates BIP-352 address, throws if invalid.
-   * Version 0 is exactly B_scan || B_m, versions 1-30 may append data which is ignored, version 31 is reserved.
-   */
-  static decodePaymentCode(pc: string): { Bscan: Uint8Array; Bm: Uint8Array } {
-    if (pc !== pc.toLowerCase() && pc !== pc.toUpperCase()) {
-      throw new Error("Mixed case silent payment code");
-    }
-    const result = bech32m.decode(pc.toLowerCase(), 1023);
-    if (result.prefix !== "sp") {
-      throw new Error("Unexpected prefix of silent payment code");
-    }
-    const version = result.words.shift();
-    if (version === undefined || version === 31) {
-      throw new Error("Unexpected version of silent payment code");
-    }
-    const data = new Uint8Array(bech32m.fromWords(result.words));
-    if (version === 0 ? data.length !== 66 : data.length < 66) {
-      throw new Error("Unexpected length of silent payment code");
-    }
-    const Bscan = data.slice(0, 33);
-    const Bm = data.slice(33, 66);
-    if (!ecc.isPoint(Bscan) || !ecc.isPoint(Bm)) {
-      throw new Error("Invalid public key in silent payment code");
-    }
-    return { Bscan, Bm };
-  }
-
-  static isPaymentCodeValid(pc: string) {
-    try {
-      SilentPayment.decodePaymentCode(pc);
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  static pubkeyToAddress(hex: string): string {
-    const publicKey = hexToUint8Array("5120" + hex);
-    return bitcoin.address.fromOutputScript(publicKey, bitcoin.networks.bitcoin);
-  }
-
-  static addressToPubkey(address: string): string {
-    return uint8ArrayToHex(bitcoin.address.toOutputScript(address).subarray(2));
-  }
-
-  /**
-   * Returns eligible input pubkeys for silent payments scanning, one per input when found.
-   * `prevoutScripts[i]` must be the spent output script for `tx.ins[i]`.
-   */
-  static getEligiblePubkeysFromTransactionInputs(tx: Transaction, prevoutScripts: Uint8Array[]): Uint8Array[] {
-    if (prevoutScripts.length !== tx.ins.length) {
-      throw new Error("prevoutScripts length must match transaction inputs length");
-    }
-
-    const result: Uint8Array[] = [];
-    for (let i = 0; i < tx.ins.length; i++) {
-      const pubkey = getEligiblePubkeyFromInput(prevoutScripts[i], tx.ins[i].script, tx.ins[i].witness);
-      if (pubkey !== null) {
-        result.push(pubkey);
-      }
-    }
-    return result;
-  }
-
-  /**
-   * Computes the per-transaction tweak from a spending transaction and its input prevouts.
-   * Returns null when the transaction should be skipped (no eligible inputs or pubkey sum is infinity).
-   */
-  static computeTweakForTx(tx: Transaction, prevoutScripts: Uint8Array[]): Uint8Array | null {
-    const pubkeys = SilentPayment.getEligiblePubkeysFromTransactionInputs(tx, prevoutScripts);
-    if (pubkeys.length === 0) {
-      return null;
-    }
-
-    const A = SilentPayment.sumPubKeys(pubkeys);
-    if (A === null) {
-      return null;
-    }
-
-    const outpoints: Array<Uint8Array> = [];
-    for (const inn of tx.ins) {
-      const txidBuffer = inn.hash;
-      const voutBuffer = new Uint8Array(SilentPayment._ser32(inn.index).reverse());
-      outpoints.push(new Uint8Array([...txidBuffer, ...voutBuffer]));
-    }
-    outpoints.sort((a, b) => compareUint8Arrays(a, b));
-    const smallest_outpoint = outpoints[0];
-    const input_hash = SilentPayment.taggedHash("BIP0352/Inputs", concatUint8Arrays([smallest_outpoint, A]));
-    if (!isValidScalar(input_hash)) {
-      return null;
-    }
-
-    const tweak = ecc.pointMultiply(A, input_hash);
-    return tweak ? new Uint8Array(tweak) : null;
-  }
-
-  static sumPubKeys(pubkeys: Uint8Array[], compressed: boolean = true): Uint8Array | null {
-    if (pubkeys.length === 0) return null;
-
-    let result = pubkeys[0];
-    let atIdentity = false;
-    for (let i = 1; i < pubkeys.length; i++) {
-      if (atIdentity) {
-        result = pubkeys[i];
-        atIdentity = false;
-        continue;
-      }
-      const sum = ecc.pointAdd(result, pubkeys[i], compressed);
-      if (!sum) {
-        // Valid opposite points sum to infinity. Keep going; only the final
-        // sum being identity is a failure. Invalid points still fail.
-        if (ecc.isPoint(result) && ecc.isPoint(pubkeys[i])) {
-          atIdentity = true;
-          continue;
-        }
-        return null;
-      }
-      result = sum;
-    }
-
-    if (atIdentity) return null;
-    if (result!.length === 32) {
-      // We have an x-only point, need to determine correct parity
-      // Use the pointCompress function to get the proper compressed format
-      try {
-        // Create a temporary compressed point by trying both parities
-        // First try even parity (0x02)
-        const evenPoint = concatUint8Arrays([new Uint8Array([2]), result]);
-        if (ecc.isPoint(evenPoint)) {
-          return ecc.pointCompress(evenPoint, compressed);
-        }
-
-        // If even doesn't work, try odd parity (0x03)
-        const oddPoint = concatUint8Arrays([new Uint8Array([3]), result]);
-        if (ecc.isPoint(oddPoint)) {
-          return ecc.pointCompress(oddPoint, compressed);
-        }
-
-        return null;
-      } catch {
-        return null;
-      }
-    }
-
-    return result;
-  }
-
-  /**
-   * takes BIP-39 mnemonic seed and returns shareable static payment code; also: Bscan, bscan, Bspend, bspend
-   */
-  static seedToCode(bip39seed: string, accountNum = 0, passphrase = ""): { address: string; Bscan: Uint8Array; bscan: Uint8Array; Bspend: Uint8Array; bspend: Uint8Array } {
-    const root = bip32.fromSeed(new Uint8Array(bip39.mnemonicToSeedSync(bip39seed, passphrase)));
-    const scanXprv = root.derivePath(`m/352'/0'/${accountNum}'/1'/0`);
-    const spendXprv = root.derivePath(`m/352'/0'/${accountNum}'/0'/0`);
-    const Bscan = scanXprv.publicKey;
-    const bscan = scanXprv.privateKey;
-    const Bspend = spendXprv.publicKey;
-    const bspend = spendXprv.privateKey;
-
-    assert(bscan, "could not derive bscan from seed");
-    assert(bspend, "could not derive bspend from seed");
-
-    const bech32Version = 0;
-    const words = [bech32Version].concat(bech32m.toWords(concatUint8Arrays([Bscan, Bspend])));
-    const address = bech32m.encode("sp", words, 1023);
-    return { address, Bscan, bscan, Bspend, bspend };
-  }
-
-  /**
-   * takes a decoded transaction (`bitcoinjs.Transaction.fromHex()` will do fine),
-   * takes computed tweak for this transaction, your mnemonic seed, and gives you UTXOs from this transaction
-   * that you own. tweak is _not_ calculated here because theoretically it can come from a tweak-indexing backend
-   * service.
-   */
-  static detectOurUtxos(tx: Transaction, seed: string, tweakHex: string, accountNum = 0, passphrase = "") {
-    const ret: UTXO[] = [];
-    const code = SilentPayment.seedToCode(seed, accountNum, passphrase);
-    const sharedSecret = getSharedSecret(code.bscan, hexToUint8Array(tweakHex));
-    const found = SilentPayment._scanUnlabeledOutputs(sharedSecret, code.Bspend, SilentPayment._taprootVoutsByPubkey(tx));
-    const txid = tx.getId();
-
-    for (const { t_k, vout } of found) {
-      const d = ecc.privateAdd(code.bspend, t_k);
-      if (!d) {
-        throw new Error("Invalid private-key tweak addition");
-      }
-
-      ret.push({
+      return found.map(({ vout }) => ({
         txid,
         vout,
-        wif: ECPair.fromPrivateKey(d).toWIF(),
-        utxoType: "p2tr",
-      });
+        utxoType: "p2tr" as const,
+      }));
     }
 
-    return ret;
-  }
-
-  static isOurUtxoUsingTweakbscanBspendAndOutputScript(outputScriptHex: string, tweakHex: string, bscan: string, Bspend: string) {
-    return SilentPayment.isOurUtxoUsingTweakbscanBspendAndOutputScriptUint8array(hexToUint8Array(outputScriptHex), hexToUint8Array(tweakHex), hexToUint8Array(bscan), hexToUint8Array(Bspend));
-  }
-
-  static isOurUtxoUsingTweakbscanBspendAndOutputScriptUint8array(outputScript: Uint8Array, tweak: Uint8Array, bscan: Uint8Array, Bspend: Uint8Array) {
-    if (outputScript.length !== 34 || outputScript[0] !== 0x51 || outputScript[1] !== 0x20) {
-      return false;
-    }
-
-    // Isolated scripts can only be checked at k=0. k>0 exists only after k=0..k-1
-    // in the same transaction; use detectOurUtxos* for that sequential scan.
-    const sharedSecret = getSharedSecret(bscan, tweak);
-    const t_k = SilentPayment._sharedSecretTweakAtK(sharedSecret, 0);
-    if (t_k === null) {
-      return false;
-    }
-
-    const outputXonly = SilentPayment._expectedOutputXonlyAtK(t_k, Bspend);
-    if (outputXonly === null) {
-      return false;
-    }
-
-    return areUint8ArraysEqual(outputScript.subarray(2), outputXonly);
-  }
-
-  static detectOurUtxosUsingTweakbscanBspend(tx: Transaction, tweakHex: string, bscan: string, Bspend: string) {
-    const sharedSecret = getSharedSecret(hexToUint8Array(bscan), hexToUint8Array(tweakHex));
-    const found = SilentPayment._scanUnlabeledOutputs(sharedSecret, hexToUint8Array(Bspend), SilentPayment._taprootVoutsByPubkey(tx));
-    const txid = tx.getId();
-
-    return found.map(({ vout }) => ({
-      txid,
-      vout,
-      utxoType: "p2tr" as const,
-    }));
-  }
-
-  private static _taprootVoutsByPubkey(tx: Transaction): Map<string, number> {
-    const taprootVoutsByPubkey = new Map<string, number>();
-    let vout = 0;
-    for (const o of tx.outs) {
-      if (o.script.length === 34 && o.script[0] === 0x51 && o.script[1] === 0x20) {
-        taprootVoutsByPubkey.set(uint8ArrayToHex(o.script.subarray(2)), vout);
+    static _taprootVoutsByPubkey(tx: Transaction): Map<string, number> {
+      const taprootVoutsByPubkey = new Map<string, number>();
+      let vout = 0;
+      for (const o of tx.outs) {
+        if (o.script.length === 34 && o.script[0] === 0x51 && o.script[1] === 0x20) {
+          taprootVoutsByPubkey.set(uint8ArrayToHex(o.script.subarray(2)), vout);
+        }
+        vout++;
       }
-      vout++;
+      return taprootVoutsByPubkey;
     }
-    return taprootVoutsByPubkey;
   }
+
+  return SilentPayment;
 }
+
+export type SilentPayment = InstanceType<ReturnType<typeof SPFactory>>;
+export type { TinySecp256k1Interface } from "./ecc";
 
 function assert(condition: any, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -538,13 +562,4 @@ function bytesToBigInt(bytes: Uint8Array): bigint {
 function bigIntTo32Bytes(num: bigint): Uint8Array {
   const hex = num.toString(16).padStart(64, "0");
   return hexToUint8Array(hex);
-}
-
-function getSharedSecret(privateKey: Uint8Array, publicKey: Uint8Array): Uint8Array {
-  const shared = ecc.pointMultiply(publicKey, privateKey, true);
-  if (!shared) {
-    throw new Error("Failed to derive shared secret");
-  }
-
-  return shared;
 }

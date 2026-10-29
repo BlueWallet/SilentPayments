@@ -45,6 +45,9 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Run tests with pure JS ECC
+        run: npm run test:noble
+
   test-bun:
     name: Tests (bun)
     runs-on: ubuntu-latest
@@ -62,3 +65,6 @@ jobs:
 
       - name: Run tests
         run: bun run test
+
+      - name: Run tests with pure JS ECC
+        run: bun run test:noble
