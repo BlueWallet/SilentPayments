@@ -274,7 +274,7 @@ export function SPFactory(ecc: TinySecp256k1Interface) {
           ret = keys[i];
           continue;
         }
-        const sum = ecc.privateAdd(ret, keys[i]);
+        const sum: Uint8Array | null = ecc.privateAdd(ret, keys[i]);
         ret = sum === null ? null : new Uint8Array(sum);
       }
 

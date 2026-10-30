@@ -4,7 +4,7 @@
   "description": "SilentPayments (BIP-352) in pure typescript",
   "main": "src/index.ts",
   "scripts": {
-    "typecheck": "tsc src/index.ts --noEmit --skipLibCheck --target esnext --moduleResolution nodenext --module NodeNext",
+    "typecheck": "tsc src/index.ts --noEmit --strict --skipLibCheck --target esnext --moduleResolution nodenext --module NodeNext",
     "prettier": "prettier -c .",
     "lint:write": "prettier . --write",
     "test": "vitest run tests/",
