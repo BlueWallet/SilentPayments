@@ -451,6 +451,17 @@ it("createTransaction treats uppercase payment code same as lowercase", () => {
   assert.deepStrictEqual(upper, lower);
 });
 
+it("createTransaction does not require a WIF for non-eligible UTXOs", () => {
+  const sp = new SilentPayment();
+  const pc = "sp1qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqjuexzk6murw56suy3e0rd2cgqvycxttddwsvgxe2usfpxumr70xc9pkqwv";
+  const eligible = { txid: "a".repeat(64), vout: 0, wif: "L1uyy5qTuGrVXrmrsvHWHgVzW9kKdrp27wBC7Vs6nZDTF2BRUVwy", utxoType: "p2wpkh" as UTXOType };
+  const nonEligible = { txid: "b".repeat(64), vout: 1, utxoType: "non-eligible" as UTXOType };
+  const withWif = sp.createTransaction([eligible, { ...nonEligible, wif: "L4PKRVk1Peaar5WuH5LiKfkTygWtFfGrFeH2g2t3YVVqiwpJjMoF" }], [{ address: pc, value: 1000 }]);
+  const withoutWif = sp.createTransaction([eligible, { ...nonEligible, wif: "" }], [{ address: pc, value: 1000 }]);
+  assert.ok(withWif[0].address?.startsWith("bc1p"));
+  assert.deepStrictEqual(withoutWif, withWif);
+});
+
 it("can turn pubkey into taproot address", () => {
   assert.strictEqual(SilentPayment.pubkeyToAddress("40ef293a8a0ebaf8b351a27d89ff4b5b3822a635e4afdca77a30170c363bafa3"), "bc1pgrhjjw52p6a03v635f7cnl6ttvuz9f34ujhaefm6xqtscd3m473szkl92g");
 
