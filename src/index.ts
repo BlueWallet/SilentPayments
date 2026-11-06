@@ -231,7 +231,7 @@ export function SPFactory(ecc: TinySecp256k1Interface) {
 
       const keys: Array<Uint8Array> = [];
       for (const utxo of utxos) {
-        let key = ECPair.fromWIF(utxo.wif).privateKey!;
+        let key = utxo.utxoType === "non-eligible" ? undefined : ECPair.fromWIF(utxo.wif).privateKey;
         switch (utxo.utxoType) {
           case "non-eligible":
             // Non-eligible UTXOs can be spent in the transaction, but are not used for the
