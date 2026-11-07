@@ -458,8 +458,13 @@ it("createTransaction does not require a WIF for non-eligible UTXOs", () => {
   const nonEligible = { txid: "b".repeat(64), vout: 1, utxoType: "non-eligible" as UTXOType };
   const withWif = sp.createTransaction([eligible, { ...nonEligible, wif: "L4PKRVk1Peaar5WuH5LiKfkTygWtFfGrFeH2g2t3YVVqiwpJjMoF" }], [{ address: pc, value: 1000 }]);
   const withoutWif = sp.createTransaction([eligible, { ...nonEligible, wif: "" }], [{ address: pc, value: 1000 }]);
+  const withInvalidWif = sp.createTransaction([eligible, { ...nonEligible, wif: "not-a-wif" }], [{ address: pc, value: 1000 }]);
   assert.ok(withWif[0].address?.startsWith("bc1p"));
   assert.deepStrictEqual(withoutWif, withWif);
+  assert.deepStrictEqual(withInvalidWif, withWif);
+  // eligible inputs still require a valid WIF
+  const missingEligible = { ...eligible, txid: "c".repeat(64), wif: "" };
+  assert.throws(() => sp.createTransaction([eligible, missingEligible], [{ address: pc, value: 1000 }]));
 });
 
 it("can turn pubkey into taproot address", () => {
